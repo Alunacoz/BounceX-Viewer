@@ -9,7 +9,7 @@
  * normally so the app works offline and loads faster on repeat visits.
  */
 
-const CACHE_NAME = 'bx-video-v1773002023'
+const CACHE_NAME = 'bx-video-v1773003847'
 
 function isVideoRequest(url) {
   try {
