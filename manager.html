@@ -1,0 +1,1695 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BounceX Manager</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .manager-layout {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* ── Tab bar ── */
+      .manager-tabs {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 0 2rem;
+        background: var(--bg);
+        position: sticky;
+        top: 60px;
+        z-index: 90;
+      }
+
+      .manager-tab-spacer {
+        flex: 1;
+      }
+
+      .manager-action-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .import-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        background: var(--accent-glow);
+        border: 1px solid rgba(240, 180, 41, 0.35);
+        border-radius: var(--radius);
+        color: var(--accent);
+        cursor: pointer;
+        padding: 0.3rem 0.7rem;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+      .import-btn:hover {
+        background: rgba(240, 180, 41, 0.25);
+        border-color: var(--accent);
+      }
+      .import-btn svg {
+        flex-shrink: 0;
+      }
+
+      .refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text3);
+        cursor: pointer;
+        padding: 0.3rem 0.7rem;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .refresh-btn:hover {
+        color: var(--text);
+        border-color: var(--border2);
+      }
+      .refresh-btn svg {
+        flex-shrink: 0;
+      }
+
+      /* ── Panel ── */
+      .manager-panel {
+        overflow-y: auto;
+        padding: 1.5rem 2rem;
+        display: none;
+      }
+      .manager-panel.active {
+        display: block;
+      }
+
+      /* ── Content list ── */
+      .content-list {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .content-item {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        padding: 0.65rem 0.9rem;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+        animation: fadeUp 0.3s ease both;
+        cursor: pointer;
+      }
+      .content-item:hover {
+        border-color: var(--border2);
+        background: var(--surface);
+      }
+
+      /* Newly added items get a brief highlight */
+      .content-item.item-new {
+        border-color: rgba(240, 180, 41, 0.5);
+        background: var(--accent-glow);
+        animation: item-flash 2s ease forwards;
+      }
+      @keyframes item-flash {
+        0% {
+          border-color: rgba(240, 180, 41, 0.7);
+          background: rgba(240, 180, 41, 0.12);
+        }
+        60% {
+          border-color: rgba(240, 180, 41, 0.4);
+          background: var(--accent-glow);
+        }
+        100% {
+          border-color: var(--border);
+          background: var(--bg2);
+        }
+      }
+
+      .item-index {
+        font-family: var(--mono);
+        font-size: 0.65rem;
+        color: var(--text3);
+        min-width: 24px;
+        text-align: right;
+        flex-shrink: 0;
+      }
+
+      .item-type-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .item-type-icon.video {
+        background: var(--accent-glow);
+        color: var(--accent);
+      }
+      .item-type-icon.playlist {
+        background: rgba(61, 214, 200, 0.12);
+        color: var(--teal);
+      }
+
+      .item-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .item-title {
+        font-family: var(--sans);
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .item-sub {
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        color: var(--text3);
+        margin-top: 0.1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .item-pills {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex-shrink: 0;
+        align-items: flex-end;
+        max-width: 260px;
+      }
+
+      .item-pill {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.03em;
+        padding: 0.15rem 0.5rem;
+        border-radius: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .item-pill.error {
+        color: var(--red);
+        background: rgba(232, 85, 85, 0.1);
+        border: 1px solid rgba(232, 85, 85, 0.25);
+      }
+      .item-pill.warning {
+        color: #f0b429;
+        background: rgba(240, 180, 41, 0.08);
+        border: 1px solid rgba(240, 180, 41, 0.22);
+      }
+
+      .item-tags {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        max-width: 200px;
+      }
+
+      /* ── Drag-and-drop overlay ── */
+      #dropOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        background: rgba(10, 11, 15, 0.88);
+        backdrop-filter: blur(6px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      #dropOverlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .drop-zone-box {
+        border: 2px dashed var(--accent);
+        border-radius: var(--radius-lg);
+        padding: 3rem 4rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        text-align: center;
+        animation: drop-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes drop-pulse {
+        0%,
+        100% {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 0 var(--accent-glow);
+        }
+        50% {
+          border-color: var(--accent2);
+          box-shadow: 0 0 24px 4px var(--accent-glow);
+        }
+      }
+
+      .drop-zone-icon {
+        color: var(--accent);
+        opacity: 0.8;
+      }
+
+      .drop-zone-label {
+        font-family: var(--serif);
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.02em;
+      }
+
+      .drop-zone-hint {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text3);
+        letter-spacing: 0.04em;
+      }
+
+      /* ── Import progress overlay ── */
+      #importOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1001;
+        background: rgba(10, 11, 15, 0.85);
+        backdrop-filter: blur(6px);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+      }
+      #importOverlay.active {
+        display: flex;
+      }
+
+      .import-spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--surface2);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .import-status-text {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        color: var(--text2);
+        letter-spacing: 0.03em;
+      }
+
+      /* ── Toast notification ── */
+      #toast {
+        position: fixed;
+        bottom: 1.5rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(12px);
+        z-index: 2000;
+        background: var(--surface);
+        border: 1px solid var(--border2);
+        border-radius: var(--radius-lg);
+        padding: 0.85rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 280px;
+        max-width: 480px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+        pointer-events: none;
+      }
+      #toast.visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .toast-title {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--accent);
+      }
+      .toast-title.error {
+        color: var(--red);
+      }
+
+      .toast-row {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text2);
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .toast-row .toast-count {
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .toast-row .toast-ids {
+        color: var(--text3);
+        font-size: 0.68rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* ── Drag handle ── */
+      .item-drag-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        color: var(--text3);
+        cursor: grab;
+        flex-shrink: 0;
+        opacity: 0.4;
+        transition:
+          opacity 0.15s,
+          color 0.15s;
+      }
+      .content-item:hover .item-drag-handle {
+        opacity: 1;
+      }
+      .item-drag-handle:active {
+        cursor: grabbing;
+      }
+
+      .content-item.drag-over {
+        border-color: var(--accent);
+        background: var(--accent-glow);
+      }
+      .content-item.dragging {
+        opacity: 0.4;
+      }
+
+      /* ── Trash button ── */
+      .item-delete-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        background: none;
+        color: var(--text3);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+          color 0.15s,
+          background 0.15s,
+          border-color 0.15s;
+      }
+      .item-delete-btn:hover {
+        color: var(--red);
+        background: rgba(232, 85, 85, 0.1);
+        border-color: rgba(232, 85, 85, 0.25);
+      }
+
+      /* ── Confirm dialog ── */
+      #confirmOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1002;
+        background: rgba(10, 11, 15, 0.8);
+        backdrop-filter: blur(6px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      #confirmOverlay.active {
+        display: flex;
+      }
+
+      .confirm-box {
+        background: var(--surface);
+        border: 1px solid var(--border2);
+        border-radius: var(--radius-lg);
+        padding: 1.75rem 2rem;
+        width: 380px;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        animation: fadeUp 0.15s ease both;
+      }
+
+      .confirm-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius);
+        background: rgba(232, 85, 85, 0.1);
+        border: 1px solid rgba(232, 85, 85, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--red);
+      }
+
+      .confirm-title {
+        font-family: var(--serif);
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.01em;
+      }
+
+      .confirm-body {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--text2);
+        line-height: 1.6;
+      }
+      .confirm-body strong {
+        color: var(--text);
+      }
+
+      .confirm-warning {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--red);
+        background: rgba(232, 85, 85, 0.08);
+        border: 1px solid rgba(232, 85, 85, 0.2);
+        border-radius: var(--radius);
+        padding: 0.5rem 0.75rem;
+        line-height: 1.5;
+      }
+
+      .confirm-actions {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+      }
+
+      .confirm-cancel-btn {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text3);
+        cursor: pointer;
+        padding: 0.45rem 1rem;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .confirm-cancel-btn:hover {
+        color: var(--text);
+        border-color: var(--border2);
+      }
+
+      .confirm-delete-btn {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        background: var(--red);
+        border: none;
+        border-radius: var(--radius);
+        color: #fff;
+        cursor: pointer;
+        padding: 0.45rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: opacity 0.15s;
+      }
+      .confirm-delete-btn:hover {
+        opacity: 0.85;
+      }
+
+      /* ── Meta editor panel ── */
+      #metaPanel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 560px;
+        max-width: 100vw;
+        z-index: 1003;
+        background: var(--bg2);
+        border-left: 1px solid var(--border2);
+        box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #metaPanel.active {
+        transform: translateX(0);
+      }
+
+      .meta-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .meta-panel-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text3);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .meta-panel-close:hover {
+        color: var(--text);
+        border-color: var(--border2);
+      }
+
+      .meta-panel-title {
+        flex: 1;
+        min-width: 0;
+      }
+      .meta-panel-name {
+        font-family: var(--serif);
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .meta-panel-sub {
+        font-family: var(--mono);
+        font-size: 0.65rem;
+        color: var(--text3);
+        letter-spacing: 0.04em;
+        margin-top: 0.1rem;
+      }
+
+      .meta-panel-save-btn {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        background: var(--accent-glow);
+        border: 1px solid rgba(240, 180, 41, 0.35);
+        border-radius: var(--radius);
+        color: var(--accent);
+        cursor: pointer;
+        padding: 0.35rem 0.9rem;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+        flex-shrink: 0;
+      }
+      .meta-panel-save-btn:hover {
+        background: rgba(240, 180, 41, 0.25);
+        border-color: var(--accent);
+      }
+      .meta-panel-save-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .meta-panel-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 1rem 1.25rem;
+        gap: 0.75rem;
+      }
+
+      .meta-json-error {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--red);
+        background: rgba(232, 85, 85, 0.08);
+        border: 1px solid rgba(232, 85, 85, 0.2);
+        border-radius: var(--radius);
+        padding: 0.5rem 0.75rem;
+        display: none;
+      }
+      .meta-json-error.visible {
+        display: block;
+      }
+
+      .meta-textarea {
+        flex: 1;
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        line-height: 1.6;
+        padding: 0.85rem 1rem;
+        resize: none;
+        outline: none;
+        transition: border-color 0.15s;
+        tab-size: 2;
+      }
+      .meta-textarea:focus {
+        border-color: var(--accent);
+      }
+      .meta-textarea.invalid {
+        border-color: var(--red);
+      }
+
+      #metaBackdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1002;
+        background: rgba(10, 11, 15, 0.5);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s;
+      }
+      #metaBackdrop.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .manager-loading {
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        border-radius: 2px;
+        margin-bottom: 1.25rem;
+        animation: mgr-shimmer 1.4s ease-in-out infinite;
+      }
+      @keyframes mgr-shimmer {
+        0% {
+          opacity: 0.3;
+          transform: scaleX(0.15);
+          transform-origin: left;
+        }
+        50% {
+          opacity: 1;
+          transform: scaleX(1);
+        }
+        100% {
+          opacity: 0.3;
+          transform: scaleX(0.15);
+          transform-origin: right;
+        }
+      }
+
+      /* ── State messages ── */
+      .manager-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 4rem 1.5rem;
+        text-align: center;
+      }
+      .manager-state p {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        color: var(--text3);
+      }
+      .manager-state .state-hint {
+        font-size: 0.7rem;
+        color: var(--text3);
+        opacity: 0.6;
+        max-width: 360px;
+      }
+      .manager-state.error p {
+        color: var(--red);
+      }
+
+      /* ── Server status ── */
+      .server-status {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--text3);
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--teal);
+        box-shadow: 0 0 5px var(--teal-glow);
+      }
+      .status-dot.error {
+        background: var(--red);
+        box-shadow: 0 0 5px rgba(232, 85, 85, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Hidden file input -->
+    <input type="file" id="fileInput" accept=".zip" style="display: none" />
+
+    <!-- Drop overlay -->
+    <div id="dropOverlay">
+      <div class="drop-zone-box">
+        <div class="drop-zone-icon">
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </div>
+        <div class="drop-zone-label">Drop .zip to import</div>
+        <div class="drop-zone-hint">
+          Videos and playlists will be registered automatically
+        </div>
+      </div>
+    </div>
+
+    <!-- Import progress overlay -->
+    <div id="importOverlay">
+      <div class="import-spinner"></div>
+      <div class="import-status-text" id="importStatusText">Importing…</div>
+    </div>
+
+    <!-- Confirm delete dialog -->
+    <div id="confirmOverlay">
+      <div class="confirm-box">
+        <div class="confirm-icon">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+        </div>
+        <div>
+          <div class="confirm-title" id="confirmTitle">Delete?</div>
+        </div>
+        <div class="confirm-body" id="confirmBody"></div>
+        <div class="confirm-warning">
+          This will permanently delete the folder and remove it from the
+          manifest. This cannot be undone.
+        </div>
+        <div class="confirm-actions">
+          <button class="confirm-cancel-btn" onclick="closeConfirm()">
+            Cancel
+          </button>
+          <button class="confirm-delete-btn" id="confirmDeleteBtn">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="toast">
+      <div class="toast-title" id="toastTitle"></div>
+      <div id="toastBody"></div>
+    </div>
+
+    <!-- Meta backdrop -->
+    <div id="metaBackdrop" onclick="closeMeta()"></div>
+
+    <!-- Meta editor panel -->
+    <div id="metaPanel">
+      <div class="meta-panel-header">
+        <button class="meta-panel-close" onclick="closeMeta()">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <div class="meta-panel-title">
+          <div class="meta-panel-name" id="metaPanelName"></div>
+          <div class="meta-panel-sub" id="metaPanelSub"></div>
+        </div>
+        <button
+          class="meta-panel-save-btn"
+          id="metaSaveBtn"
+          onclick="saveMeta()"
+        >
+          Save
+        </button>
+      </div>
+      <div class="meta-panel-body">
+        <div class="meta-json-error" id="metaJsonError"></div>
+        <textarea
+          class="meta-textarea"
+          id="metaTextarea"
+          spellcheck="false"
+        ></textarea>
+      </div>
+    </div>
+
+    <div class="manager-layout">
+      <header class="site-header">
+        <a href="http://localhost:8000/index.html" class="site-logo">
+          Bounce
+          <span>X</span>
+        </a>
+        <div class="server-status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Manager</span>
+        </div>
+        <nav class="header-nav" style="margin-left: auto">
+          <a href="http://localhost:8000/index.html">Browse</a>
+          <a href="http://localhost:8000/about.html">About</a>
+          <a href="http://localhost:8000/settings.html">Settings</a>
+          <a href="http://localhost:8001/manager.html" class="active">
+            Manager
+          </a>
+        </nav>
+      </header>
+
+      <div class="manager-tabs">
+        <button
+          class="page-tab active"
+          id="tabVideos"
+          onclick="setTab('videos')"
+        >
+          Videos
+          <span
+            id="videoTabCount"
+            style="font-size: 0.6rem; color: var(--text3); margin-left: 0.35rem"
+          ></span>
+        </button>
+        <button
+          class="page-tab"
+          id="tabPlaylists"
+          onclick="setTab('playlists')"
+        >
+          Playlists
+          <span
+            id="playlistTabCount"
+            style="font-size: 0.6rem; color: var(--text3); margin-left: 0.35rem"
+          ></span>
+        </button>
+        <div class="manager-tab-spacer"></div>
+        <div class="manager-action-row">
+          <button
+            class="import-btn"
+            onclick="document.getElementById('fileInput').click()"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Import .zip
+          </button>
+          <button class="refresh-btn" onclick="loadAll()">
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="manager-panel active" id="panelVideos">
+        <div class="content-list" id="videoList"></div>
+      </div>
+      <div class="manager-panel" id="panelPlaylists">
+        <div class="content-list" id="playlistList"></div>
+      </div>
+    </div>
+
+    <script>
+      const API = 'http://localhost:8001'
+      let toastTimer = null
+
+      // ── Drag-and-drop reorder ─────────────────────────────────────────────
+      let _dragSrc = null
+
+      function setupDragEvents(el, type) {
+        const handle = el.querySelector('.item-drag-handle')
+
+        // Only enable dragging when the user grabs the handle
+        handle.addEventListener('mousedown', () =>
+          el.setAttribute('draggable', 'true'),
+        )
+        handle.addEventListener('mouseup', () =>
+          el.setAttribute('draggable', 'false'),
+        )
+
+        el.addEventListener('dragstart', (e) => {
+          _dragSrc = el
+          el.classList.add('dragging')
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', el.dataset.id)
+        })
+
+        el.addEventListener('dragend', () => {
+          el.setAttribute('draggable', 'false')
+          el.classList.remove('dragging')
+          document
+            .querySelectorAll('.content-item')
+            .forEach((i) => i.classList.remove('drag-over'))
+          _dragSrc = null
+        })
+
+        el.addEventListener('dragover', (e) => {
+          if (!_dragSrc || _dragSrc === el) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          document
+            .querySelectorAll('.content-item')
+            .forEach((i) => i.classList.remove('drag-over'))
+          el.classList.add('drag-over')
+        })
+
+        el.addEventListener('dragleave', () => el.classList.remove('drag-over'))
+
+        el.addEventListener('drop', async (e) => {
+          e.preventDefault()
+          el.classList.remove('drag-over')
+          if (!_dragSrc || _dragSrc === el) return
+
+          const list = el.closest('.content-list')
+          const items = [...list.querySelectorAll('.content-item')]
+          const fromIdx = items.indexOf(_dragSrc)
+          const toIdx = items.indexOf(el)
+          if (fromIdx === -1 || toIdx === -1) return
+
+          // Move in DOM immediately for snappy feel
+          if (fromIdx < toIdx) el.after(_dragSrc)
+          else el.before(_dragSrc)
+
+          // Update index numbers
+          list.querySelectorAll('.content-item').forEach((item, i) => {
+            item.querySelector('.item-index').textContent = String(
+              i + 1,
+            ).padStart(2, '0')
+          })
+
+          // Persist to server
+          const newOrder = [...list.querySelectorAll('.content-item')].map(
+            (i) => i.dataset.id,
+          )
+          const section = type === 'video' ? 'videos' : 'playlists'
+          try {
+            const res = await fetch(`${API}/manager-api/${section}/reorder`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newOrder),
+              cache: 'no-store',
+            })
+            const result = await res.json()
+            if (result.error) showToast('error', 'Reorder failed', result.error)
+          } catch (err) {
+            showToast('error', 'Reorder failed', err.message)
+          }
+        })
+      }
+
+      // ── Meta editor ───────────────────────────────────────────────────────
+      let _metaContext = null
+
+      async function openMeta(type, id, displayName) {
+        _metaContext = { type, id }
+        document.getElementById('metaPanelName').textContent = displayName
+        document.getElementById('metaPanelSub').textContent =
+          `${type === 'video' ? 'videos' : 'playlists'}/${id}/meta.json`
+        document.getElementById('metaTextarea').value = 'Loading…'
+        document.getElementById('metaTextarea').classList.remove('invalid')
+        document.getElementById('metaJsonError').classList.remove('visible')
+        document.getElementById('metaSaveBtn').disabled = true
+        document.getElementById('metaPanel').classList.add('active')
+        document.getElementById('metaBackdrop').classList.add('active')
+
+        try {
+          const res = await fetch(
+            `${API}/manager-api/${type === 'video' ? 'videos' : 'playlists'}/${encodeURIComponent(id)}/meta`,
+            { cache: 'no-store' },
+          )
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          document.getElementById('metaTextarea').value = JSON.stringify(
+            data,
+            null,
+            2,
+          )
+          document.getElementById('metaSaveBtn').disabled = false
+        } catch (e) {
+          document.getElementById('metaTextarea').value = ''
+          showMetaError(`Failed to load meta.json: ${e.message}`)
+        }
+      }
+
+      function closeMeta() {
+        document.getElementById('metaPanel').classList.remove('active')
+        document.getElementById('metaBackdrop').classList.remove('active')
+        _metaContext = null
+      }
+
+      async function saveMeta() {
+        if (!_metaContext) return
+        const { type, id } = _metaContext
+        const raw = document.getElementById('metaTextarea').value
+        const errorEl = document.getElementById('metaJsonError')
+        const textarea = document.getElementById('metaTextarea')
+
+        // Validate JSON client-side first
+        try {
+          JSON.parse(raw)
+        } catch (e) {
+          textarea.classList.add('invalid')
+          showMetaError(`Invalid JSON: ${e.message}`)
+          return
+        }
+
+        textarea.classList.remove('invalid')
+        errorEl.classList.remove('visible')
+        document.getElementById('metaSaveBtn').disabled = true
+
+        const section = type === 'video' ? 'videos' : 'playlists'
+        try {
+          const res = await fetch(
+            `${API}/manager-api/${section}/${encodeURIComponent(id)}/meta`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: raw,
+              cache: 'no-store',
+            },
+          )
+          const result = await res.json()
+          if (result.error) throw new Error(result.error)
+          document.getElementById('metaSaveBtn').disabled = false
+          showToast('success', 'Saved', `meta.json updated for "${id}"`)
+          // Refresh the list so any title changes reflect immediately
+          if (type === 'video') await loadVideos()
+          else await loadPlaylists()
+        } catch (e) {
+          document.getElementById('metaSaveBtn').disabled = false
+          showMetaError(`Save failed: ${e.message}`)
+        }
+      }
+
+      function showMetaError(msg) {
+        const el = document.getElementById('metaJsonError')
+        el.textContent = msg
+        el.classList.add('visible')
+      }
+
+      // Tab key inserts spaces in the textarea instead of moving focus
+      document
+        .getElementById('metaTextarea')
+        .addEventListener('keydown', (e) => {
+          if (e.key === 'Tab') {
+            e.preventDefault()
+            const ta = e.target
+            const start = ta.selectionStart
+            const end = ta.selectionEnd
+            ta.value = ta.value.slice(0, start) + '  ' + ta.value.slice(end)
+            ta.selectionStart = ta.selectionEnd = start + 2
+          }
+          // Ctrl/Cmd+S to save
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault()
+            saveMeta()
+          }
+        })
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeConfirm()
+          closeMeta()
+        }
+      })
+
+      // ── Confirm & delete ──────────────────────────────────────────────────
+      let _pendingDelete = null
+
+      function confirmDelete(type, id, displayName) {
+        _pendingDelete = { type, id }
+        const typeLabel = type === 'video' ? 'video' : 'playlist'
+        document.getElementById('confirmTitle').textContent =
+          `Delete ${typeLabel}?`
+        document.getElementById('confirmBody').innerHTML =
+          `Folder <strong>${esc(id)}</strong> and all its contents will be removed from your project.`
+        document.getElementById('confirmDeleteBtn').onclick = executeDelete
+        document.getElementById('confirmOverlay').classList.add('active')
+      }
+
+      function closeConfirm() {
+        document.getElementById('confirmOverlay').classList.remove('active')
+        _pendingDelete = null
+      }
+
+      async function executeDelete() {
+        if (!_pendingDelete) return
+        const { type, id } = _pendingDelete
+        closeConfirm()
+
+        const endpoint =
+          type === 'video'
+            ? `${API}/manager-api/videos/${encodeURIComponent(id)}`
+            : `${API}/manager-api/playlists/${encodeURIComponent(id)}`
+
+        try {
+          const res = await fetch(endpoint, {
+            method: 'DELETE',
+            cache: 'no-store',
+          })
+          const result = await res.json()
+          if (result.error) {
+            showToast('error', 'Delete failed', result.error)
+            return
+          }
+          showToast(
+            'success',
+            `${type === 'video' ? 'Video' : 'Playlist'} deleted`,
+            `"${id}" has been removed.`,
+          )
+          if (type === 'video') await loadVideos()
+          else await loadPlaylists()
+        } catch (e) {
+          showToast('error', 'Delete failed', e.message)
+        }
+      }
+
+      // Close on backdrop click
+      document
+        .getElementById('confirmOverlay')
+        .addEventListener('click', (e) => {
+          if (e.target === document.getElementById('confirmOverlay'))
+            closeConfirm()
+        })
+
+      // ── Tab switching ────────────────────────────────────────────────────
+      function setTab(tab) {
+        document
+          .getElementById('tabVideos')
+          .classList.toggle('active', tab === 'videos')
+        document
+          .getElementById('tabPlaylists')
+          .classList.toggle('active', tab === 'playlists')
+        document
+          .getElementById('panelVideos')
+          .classList.toggle('active', tab === 'videos')
+        document
+          .getElementById('panelPlaylists')
+          .classList.toggle('active', tab === 'playlists')
+      }
+
+      // ── Load ─────────────────────────────────────────────────────────────
+      async function loadAll(newVideoIds = [], newPlaylistIds = []) {
+        showLoading('videoList')
+        showLoading('playlistList')
+        await Promise.all([
+          loadVideos(newVideoIds),
+          loadPlaylists(newPlaylistIds),
+        ])
+      }
+
+      async function loadVideos(highlightIds = []) {
+        const el = document.getElementById('videoList')
+        try {
+          const res = await fetch(
+            `${API}/manager-api/videos?_t=${Date.now()}`,
+            { cache: 'no-store' },
+          )
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          if (data.error) throw new Error(data.error)
+          document.getElementById('videoTabCount').textContent =
+            `(${data.length})`
+          el.innerHTML = ''
+          if (data.length === 0) {
+            el.innerHTML = emptyState('No videos registered in manifest')
+            return
+          }
+          data.forEach((v, i) => {
+            const item = buildVideoItem(v, i)
+            if (highlightIds.includes(v._folder)) item.classList.add('item-new')
+            el.appendChild(item)
+          })
+          setStatusOk()
+        } catch (e) {
+          el.innerHTML = errorState('Failed to load videos', e.message)
+          setStatusError()
+        }
+      }
+
+      async function loadPlaylists(highlightIds = []) {
+        const el = document.getElementById('playlistList')
+        try {
+          const res = await fetch(`${API}/manager-api/playlists`, {
+            cache: 'no-store',
+          })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          if (data.error) throw new Error(data.error)
+          document.getElementById('playlistTabCount').textContent =
+            `(${data.length})`
+          el.innerHTML = ''
+          if (data.length === 0) {
+            el.innerHTML = emptyState('No playlists registered in manifest')
+            return
+          }
+          data.forEach((p, i) => {
+            const item = buildPlaylistItem(p, i)
+            if (highlightIds.includes(p._id)) item.classList.add('item-new')
+            el.appendChild(item)
+          })
+        } catch (e) {
+          document.getElementById('playlistList').innerHTML = errorState(
+            'Failed to load playlists',
+            e.message,
+          )
+        }
+      }
+
+      // ── Import ────────────────────────────────────────────────────────────
+      async function importZip(file) {
+        if (!file || !file.name.endsWith('.zip')) {
+          showToast('error', 'Invalid file', 'Please select a .zip file.')
+          return
+        }
+
+        showImportOverlay(`Importing ${file.name}…`)
+
+        try {
+          const res = await fetch(`${API}/manager-api/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/zip' },
+            body: file,
+          })
+          const result = await res.json()
+          hideImportOverlay()
+
+          if (result.error) {
+            showToast('error', 'Import failed', result.error)
+            return
+          }
+
+          const { added_videos, added_playlists, skipped } = result
+          const totalAdded = added_videos.length + added_playlists.length
+
+          if (totalAdded === 0 && skipped.length === 0) {
+            showToast(
+              'error',
+              'Nothing imported',
+              'No videos or playlists folders found in the zip.',
+            )
+            return
+          }
+
+          // Reload lists and highlight new entries
+          await loadAll(added_videos, added_playlists)
+
+          // Switch to the relevant tab if only one type was imported
+          if (added_videos.length > 0 && added_playlists.length === 0)
+            setTab('videos')
+          else if (added_playlists.length > 0 && added_videos.length === 0)
+            setTab('playlists')
+
+          // Build toast
+          const lines = []
+          if (added_videos.length)
+            lines.push({
+              count: added_videos.length,
+              label: `video${added_videos.length !== 1 ? 's' : ''}`,
+              ids: added_videos,
+            })
+          if (added_playlists.length)
+            lines.push({
+              count: added_playlists.length,
+              label: `playlist${added_playlists.length !== 1 ? 's' : ''}`,
+              ids: added_playlists,
+            })
+          if (skipped.length)
+            lines.push({
+              count: skipped.length,
+              label: `skipped (already exist${skipped.length !== 1 ? '' : 's'})`,
+              ids: skipped.map((s) => s.id),
+              dim: true,
+            })
+
+          showToast(
+            'success',
+            `${totalAdded} item${totalAdded !== 1 ? 's' : ''} imported`,
+            lines,
+          )
+        } catch (e) {
+          hideImportOverlay()
+          showToast('error', 'Import failed', e.message)
+        }
+      }
+
+      // ── File input ────────────────────────────────────────────────────────
+      document.getElementById('fileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        if (file) importZip(file)
+        e.target.value = ''
+      })
+
+      // ── Drag and drop (zip import) ─────────────────────────────────────────
+      let dragCounter = 0
+
+      function isFileDrag(e) {
+        return (
+          e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')
+        )
+      }
+
+      document.addEventListener('dragenter', (e) => {
+        if (!isFileDrag(e)) return
+        e.preventDefault()
+        dragCounter++
+        if (dragCounter === 1)
+          document.getElementById('dropOverlay').classList.add('active')
+      })
+
+      document.addEventListener('dragleave', (e) => {
+        if (!isFileDrag(e)) return
+        dragCounter--
+        if (dragCounter === 0)
+          document.getElementById('dropOverlay').classList.remove('active')
+      })
+
+      document.addEventListener('dragover', (e) => {
+        if (!isFileDrag(e)) return
+        e.preventDefault()
+      })
+
+      document.addEventListener('drop', (e) => {
+        if (!isFileDrag(e)) return
+        e.preventDefault()
+        dragCounter = 0
+        document.getElementById('dropOverlay').classList.remove('active')
+        const file = e.dataTransfer.files[0]
+        if (file) importZip(file)
+      })
+
+      // ── Import overlay ────────────────────────────────────────────────────
+      function showImportOverlay(msg) {
+        document.getElementById('importStatusText').textContent = msg
+        document.getElementById('importOverlay').classList.add('active')
+      }
+      function hideImportOverlay() {
+        document.getElementById('importOverlay').classList.remove('active')
+      }
+
+      // ── Toast ─────────────────────────────────────────────────────────────
+      function showToast(type, title, body) {
+        const toast = document.getElementById('toast')
+        const toastTitle = document.getElementById('toastTitle')
+        const toastBody = document.getElementById('toastBody')
+
+        toastTitle.className =
+          'toast-title' + (type === 'error' ? ' error' : '')
+        toastTitle.textContent = title
+
+        if (typeof body === 'string') {
+          toastBody.innerHTML = `<div class="toast-row"><span>${esc(body)}</span></div>`
+        } else {
+          // Array of { count, label, ids, dim }
+          toastBody.innerHTML = body
+            .map(
+              (line) => `
+        <div class="toast-row" style="${line.dim ? 'opacity:0.6' : ''}">
+          <span class="toast-count">${line.count}</span>
+          <span>${esc(line.label)}</span>
+          <span class="toast-ids">${esc(line.ids.join(', '))}</span>
+        </div>
+      `,
+            )
+            .join('')
+        }
+
+        clearTimeout(toastTimer)
+        toast.classList.add('visible')
+        toastTimer = setTimeout(() => toast.classList.remove('visible'), 5000)
+      }
+
+      // ── Item builders ─────────────────────────────────────────────────────
+      function buildVideoItem(v, i) {
+        const el = document.createElement('div')
+        el.className = 'content-item'
+        el.style.animationDelay = `${i * 0.02}s`
+        const sub =
+          [
+            v.pathCreator && `Path: ${v.pathCreator}`,
+            v.videoCreator && `Video: ${v.videoCreator}`,
+          ]
+            .filter(Boolean)
+            .join('  ·  ') || v._folder
+        const errors = v._errors || []
+        const warnings = v._warnings || []
+        const pillsHtml = [
+          ...errors.map(
+            (e) => `<span class="item-pill error">${esc(e)}</span>`,
+          ),
+          ...warnings.map(
+            (w) => `<span class="item-pill warning">${esc(w)}</span>`,
+          ),
+        ].join('')
+        el.setAttribute('draggable', 'false')
+        el.dataset.id = v._folder
+        el.dataset.type = 'video'
+        el.innerHTML = `
+      <div class="item-drag-handle" title="Drag to reorder">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+          <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+          <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="item-index">${String(i + 1).padStart(2, '0')}</div>
+      <div class="item-body">
+        <div class="item-title">${esc(v.title || v._folder)}</div>
+        <div class="item-sub">${esc(sub)}</div>
+      </div>
+      ${pillsHtml ? `<div class="item-pills">${pillsHtml}</div>` : ''}
+      <button class="item-delete-btn" title="Delete video">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </button>
+    `
+        setupDragEvents(el, 'video')
+        el.querySelector('.item-delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          confirmDelete('video', v._folder, v.title || v._folder)
+        })
+        el.addEventListener('click', () =>
+          openMeta('video', v._folder, v.title || v._folder),
+        )
+        return el
+      }
+
+      function buildPlaylistItem(p, i) {
+        const el = document.createElement('div')
+        el.className = 'content-item'
+        el.style.animationDelay = `${i * 0.02}s`
+        const count = (p.videos || []).length
+        const sub =
+          [
+            p.author && `by ${p.author}`,
+            count ? `${count} video${count !== 1 ? 's' : ''}` : null,
+          ]
+            .filter(Boolean)
+            .join('  ·  ') || p._id
+        const errors = p._errors || []
+        const warnings = p._warnings || []
+        const pillsHtml = [
+          ...errors.map(
+            (e) => `<span class="item-pill error">${esc(e)}</span>`,
+          ),
+          ...warnings.map(
+            (w) => `<span class="item-pill warning">${esc(w)}</span>`,
+          ),
+        ].join('')
+        el.setAttribute('draggable', 'false')
+        el.dataset.id = p._id
+        el.dataset.type = 'playlist'
+        el.innerHTML = `
+      <div class="item-drag-handle" title="Drag to reorder">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+          <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+          <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="item-index">${String(i + 1).padStart(2, '0')}</div>
+      <div class="item-body">
+        <div class="item-title">${esc(p.title || p._id)}</div>
+        <div class="item-sub">${esc(sub)}</div>
+      </div>
+      ${pillsHtml ? `<div class="item-pills">${pillsHtml}</div>` : ''}
+      <button class="item-delete-btn" title="Delete playlist">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </button>
+    `
+        setupDragEvents(el, 'playlist')
+        el.querySelector('.item-delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          confirmDelete('playlist', p._id, p.title || p._id)
+        })
+        el.addEventListener('click', () =>
+          openMeta('playlist', p._id, p.title || p._id),
+        )
+        return el
+      }
+
+      // ── Status ─────────────────────────────────────────────────────────────
+      function setStatusOk() {
+        document.getElementById('statusDot').className = 'status-dot'
+        document.getElementById('statusText').textContent = 'Manager'
+      }
+      function setStatusError() {
+        document.getElementById('statusDot').className = 'status-dot error'
+        document.getElementById('statusText').textContent = 'server unreachable'
+      }
+
+      // ── Helpers ─────────────────────────────────────────────────────────────
+      function showLoading(id) {
+        document.getElementById(id).innerHTML =
+          '<div class="manager-loading"></div>'
+      }
+      function emptyState(msg) {
+        return `<div class="manager-state">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.25">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <p>${esc(msg)}</p>
+    </div>`
+      }
+      function errorState(msg, detail = '') {
+        return `<div class="manager-state error">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.2" opacity="0.5">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p>${esc(msg)}</p>
+      ${detail ? `<div class="state-hint">${esc(detail)}</div>` : ''}
+    </div>`
+      }
+      function esc(s) {
+        return String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+      }
+
+      loadAll()
+
+      // Re-fetch whenever the page becomes visible again (handles bfcache
+      // restores when navigating back, and tab switching).
+      window.addEventListener('pageshow', (e) => {
+        if (e.persisted) loadAll()
+      })
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadAll()
+      })
+    </script>
+  </body>
+</html>
