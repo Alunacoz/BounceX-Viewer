@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Check if python is installed
+if ! command -v python3 &>/dev/null; then
+    echo "Python 3 is not installed."
+    echo "Install it from: https://www.python.org/downloads/"
+    echo "Or on Mac, run: brew install python"
+    exit 1
+fi
+
 # --- Setup (only runs if needed) ---
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
