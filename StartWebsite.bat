@@ -1,41 +1,35 @@
 @echo off
 setlocal enabledelayedexpansion
-
 echo ===== Starting Server Setup =====
 
-:: Activate the virtual environment
-echo Activating virtual environment...
+if not exist "venv\" (
+    echo Creating virtual environment...
+    python -m venv venv
+    if errorlevel 1 ( echo Failed to create venv! & pause & exit /b 1 )
+)
+
 call .\venv\Scripts\activate.bat
+if errorlevel 1 ( echo Failed to activate venv! & pause & exit /b 1 )
 
-:: Check if activation worked
+python -c "import RangeHTTPServer" 2>nul
 if errorlevel 1 (
-    echo Failed to activate virtual environment!
-    exit /b 1
+    echo Installing dependencies...
+    pip install -r requirements.txt
+    if errorlevel 1 ( echo Dependency install failed! & pause & exit /b 1 )
 )
 
-:: Bump Cache Name
-echo Running bump-sw.py...
 python bump-sw.py
-if errorlevel 1 (
-    echo bump-sw.py failed!
-    exit /b 1
-)
 
-:: Start the Manager server in a new window
-echo Starting manager.py in new window...
-start "Manager Server" cmd /c "call .\venv\Scripts\activate.bat && python manager.py && echo Manager terminated - Press any key... && pause > nul"
+echo Starting manager in background...
+for /f %%i in ('powershell -command "Start-Process python -ArgumentList 'manager.py' -PassThru -WindowStyle Hidden | Select-Object -ExpandProperty Id"') do set MANAGER_PID=%%i
 
-:: Give the manager a moment to start
-timeout /t 2 /nobreak > nul
-
-:: Run the main RangeHTTPServer
 echo Starting HTTP Server on port 8000...
-echo Press Ctrl+C to stop the server and exit
+echo Press Ctrl+C to stop.
 echo.
 python -m RangeHTTPServer 8000 --bind 0.0.0.0
 
-:: When HTTP server stops, remind user to close manager
 echo.
-echo HTTP Server stopped.
-echo Please close the Manager Server window manually.
+echo Stopping manager...
+taskkill /pid %MANAGER_PID% /f > nul 2>&1
+echo Done.
 pause
