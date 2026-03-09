@@ -1,7 +1,7 @@
 # BounceX-Viewer
 
 > **License:** MIT License + Commons Clause  
-> ⚠️ **Note:** Don't steal features to commercialize it!
+> ⚠️ **Note:** Don't commercialize it without permission!
 
 An admittedly vibe-coded, self-hosted, private video viewer that syncs BounceX paths to corresponding videos with full customization options.
 
@@ -64,10 +64,10 @@ This starts both the main site AND the manager.
 
    **Windows:**
 
-   This is UNTESTED because I don't use Windows :]
+   This is ⚠️UNTESTED⚠️ because I don't use Windows :]
 
    ```bash
-   run-server.bat
+   StartWebsite.bat
    ```
 
 This script automatically activates the virtual environment and starts the website.
