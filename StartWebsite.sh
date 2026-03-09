@@ -1,17 +1,22 @@
 #!/bin/bash
 
-# Activate the virtual environment
+# --- Setup (only runs if needed) ---
+if [ ! -d "venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv venv
+fi
+
 source ./venv/bin/activate
 
-# Bump Cache Name
-python bump-sw.py
+# Check if dependencies are installed by testing a key package
+if ! python -c "import RangeHTTPServer" 2>/dev/null; then
+    echo "Installing dependencies..."
+    pip install -r requirements.txt
+fi
 
-# Start the Manager server in the background
+# --- Start ---
+python bump-sw.py
 python manager.py &
 MANAGER_PID=$!
-
-# Kill the manager when this script exits (Ctrl+C or otherwise)
 trap "kill $MANAGER_PID 2>/dev/null" EXIT
-
-# Run the main RangeHTTPServer in the foreground
 python -m RangeHTTPServer 8000 --bind 0.0.0.0
