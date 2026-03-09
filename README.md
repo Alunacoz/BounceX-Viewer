@@ -11,9 +11,17 @@ This program was written with generative AI, with human intervention as well. I 
 
 ## Features
 
-- 🎯 **Path Synchronization**: Automatically syncs BounceX paths to their corresponding videos! Works when scrubbing as well!
-- 🎨 **Customization**: Full path customization including colors, size, and more!
-- 🔒 **Private & Self-Hosted**: Completely private! Host any video you like on your own personal network!
+- 🎯 Path Synchronization: Automatically syncs BounceX paths to their corresponding videos! Works when scrubbing as well!
+- 🔒 Private & Self-Hosted: Completely private! Host any video you like on your own personal network!
+- 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion!
+- 📺 Classic Overlays: Generated on the fly, with the ability to disable the background dim!
+- 🔄 Y-Axis Flip: Need a different perspective? Flip the Y-axis with ease!
+- 📍 Multiple Paths Per Video: Perfect for difficulty selection or different route options!
+- 🎨 Color Customization: Make those paths your own with custom colors!
+- 📏 Path Size Control: Adjust path thickness to your preference!
+- 📦 Easy Imports: Just drag in a .zip file to add new videos!
+- 📱 Cross-Device Access: Watch on any device (including mobile!) on your local network!
+- 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Getting Started
 
