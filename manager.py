@@ -7,6 +7,7 @@ Opens http://localhost:8001/manager.html automatically.
 
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -405,6 +406,155 @@ def api_reorder(handler, section: str):
     return {"reordered": section, "count": len(new_order)}, 200
 
 
+# ── Multipart form parser ──────────────────────────────────────────────────────
+
+def parse_multipart_form(handler):
+    """
+    Parse multipart/form-data from an HTTP request.
+    Returns (fields, files) where:
+      fields = {name: str_value}
+      files  = {name: (original_filename, bytes)}
+    Handles multiple files with the same name by using name_0, name_1 etc.
+    """
+    ct = handler.headers.get('Content-Type', '')
+    m = re.search(r'boundary=([^\s;]+)', ct)
+    if not m:
+        raise ValueError("No boundary in Content-Type")
+
+    boundary = m.group(1).strip('"\'')
+    boundary_bytes = ('--' + boundary).encode('latin-1')
+
+    content_length = int(handler.headers.get('Content-Length', 0))
+    body = handler.rfile.read(content_length)
+
+    fields = {}
+    files = {}
+
+    parts = body.split(boundary_bytes)
+    for part in parts[1:]:
+        if part.lstrip(b'\r\n').startswith(b'--'):
+            break
+        if part.startswith(b'\r\n'):
+            part = part[2:]
+        elif part.startswith(b'\n'):
+            part = part[1:]
+
+        if b'\r\n\r\n' in part:
+            header_raw, body_part = part.split(b'\r\n\r\n', 1)
+        elif b'\n\n' in part:
+            header_raw, body_part = part.split(b'\n\n', 1)
+        else:
+            continue
+
+        if body_part.endswith(b'\r\n'):
+            body_part = body_part[:-2]
+        elif body_part.endswith(b'\n'):
+            body_part = body_part[:-1]
+
+        header_str = header_raw.decode('utf-8', errors='replace')
+        name_m = re.search(r'name="([^"]*)"', header_str, re.IGNORECASE)
+        fname_m = re.search(r'filename="([^"]*)"', header_str, re.IGNORECASE)
+        if not name_m:
+            continue
+
+        name = name_m.group(1)
+        if fname_m:
+            filename = fname_m.group(1)
+            files[name] = (filename, body_part)
+        else:
+            fields[name] = body_part.decode('utf-8', errors='replace')
+
+    return fields, files
+
+
+# ── API: create video package ──────────────────────────────────────────────────
+
+def api_create_video(handler):
+    ct = handler.headers.get('Content-Type', '')
+    if 'multipart/form-data' not in ct:
+        return {"error": "Expected multipart/form-data"}, 400
+
+    try:
+        fields, files = parse_multipart_form(handler)
+    except Exception as e:
+        return {"error": f"Failed to parse form data: {e}"}, 400
+
+    # ── Validate folder ID ──────────────────────────────────────────────────
+    folder_id = fields.get('folderId', '').strip()
+    if not folder_id:
+        return {"error": "folderId is required"}, 400
+    if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+        return {"error": "Invalid folder ID"}, 400
+
+    folder_path = VIDEO_BASE / folder_id
+    if folder_path.exists():
+        return {"error": f'Folder "{folder_id}" already exists'}, 409
+
+    # ── Validate video file ─────────────────────────────────────────────────
+    if 'video' not in files:
+        return {"error": "Video file is required"}, 400
+    video_filename, video_bytes = files['video']
+    if not video_filename:
+        return {"error": "Video file has no name"}, 400
+
+    # ── Parse meta ──────────────────────────────────────────────────────────
+    try:
+        meta = json.loads(fields.get('meta', '{}'))
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid meta JSON: {e}"}, 400
+
+    # ── Build the package ───────────────────────────────────────────────────
+    folder_path.mkdir(parents=True, exist_ok=False)
+    try:
+        # Video
+        with open(folder_path / video_filename, 'wb') as f:
+            f.write(video_bytes)
+        meta['videoFile'] = video_filename
+
+        # Thumbnail (optional)
+        if 'thumbnail' in files:
+            thumb_filename, thumb_bytes = files['thumbnail']
+            if thumb_filename and thumb_bytes:
+                with open(folder_path / thumb_filename, 'wb') as f:
+                    f.write(thumb_bytes)
+                meta['thumbnail'] = thumb_filename
+
+        # BX files — sent as bx_0, bx_1, …
+        bx_files_meta = []
+        idx = 0
+        while f'bx_{idx}' in files:
+            bx_filename, bx_bytes = files[f'bx_{idx}']
+            label = fields.get(f'bxLabel_{idx}', 'Default')
+            if bx_filename and bx_bytes:
+                with open(folder_path / bx_filename, 'wb') as f:
+                    f.write(bx_bytes)
+                bx_files_meta.append({"label": label, "file": bx_filename})
+            idx += 1
+        if bx_files_meta:
+            meta['bxFiles'] = bx_files_meta
+
+        # Write meta.json
+        write_json(folder_path / 'meta.json', meta)
+
+        # Update manifest (prepend so it shows first)
+        manifest_path = VIDEO_BASE / 'manifest.json'
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+        else:
+            VIDEO_BASE.mkdir(parents=True, exist_ok=True)
+            manifest = []
+        manifest.insert(0, folder_id)
+        write_json(manifest_path, manifest)
+
+        bump_version()
+        return {"created": folder_id}, 200
+
+    except Exception as e:
+        if folder_path.exists():
+            shutil.rmtree(folder_path)
+        return {"error": f"Failed to create package: {e}"}, 500
+
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class ManagerHandler(SimpleHTTPRequestHandler):
@@ -433,6 +583,11 @@ class ManagerHandler(SimpleHTTPRequestHandler):
         if path == "/manager-api/import":
             try:
                 self._send_json(*api_import(self))
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        elif path == "/manager-api/videos/create":
+            try:
+                self._send_json(*api_create_video(self))
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
         elif path == "/manager-api/videos/reorder":
