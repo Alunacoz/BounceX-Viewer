@@ -10,26 +10,26 @@ if errorlevel 1 (
     set /p INSTALL_PYTHON="Install Python now via winget? (Y/N): "
     if /i "!INSTALL_PYTHON!"=="Y" (
         echo Installing Python...
-        winget install Python.Python.3.13
+        winget install Python.Python.3.13 --source winget --silent --accept-package-agreements --accept-source-agreements
         if errorlevel 1 (
-            echo Install failed. Try installing Python manually at https://www.python.org/downloads/
+            echo.
+            echo Install failed. Please install Python manually:
+            echo   https://www.python.org/downloads/
             echo Make sure to check "Add Python to PATH" during installation!
             pause
             exit /b 1
         )
-        echo Refreshing PATH...
-        for /f "tokens=*" %%i in ('powershell -command "[System.Environment]::GetEnvironmentVariable(\"PATH\", \"Machine\")"') do set "PATH=%%i;%PATH%"
-        python --version > nul 2>&1
-        if errorlevel 1 (
-            echo Python still not found in PATH after install.
-            echo Please close this window and start the script again!
-            pause
-            exit /b 1
-        )
-        echo Python installed successfully! Continuing setup...
         echo.
+        echo Python installed successfully!
+        echo.
+        echo -------------------------------------------------------
+        echo  Please close this window and run StartWebsite.bat again
+        echo -------------------------------------------------------
+        echo.
+        pause
+        exit /b 0
     ) else (
-        echo Try installing Python manually at https://www.python.org/downloads/
+        echo Please install Python manually at https://www.python.org/downloads/
         echo Make sure to check "Add Python to PATH" during installation!
         pause
         exit /b 1
