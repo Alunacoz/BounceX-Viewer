@@ -85,12 +85,7 @@ async function init() {
     const manifest = await fetchJSON(`${VIDEO_BASE}/manifest.json`)
     const metas = await Promise.all(
       manifest.map((id) =>
-        fetchJSON(`${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`).then(
-          (m) => ({
-            ...m,
-            _folder: id,
-          }),
-        ),
+        fetchVideoMeta(id).then((m) => ({ ...m, _folder: id })),
       ),
     )
     allVideos = metas
@@ -134,6 +129,33 @@ async function fetchJSON(url) {
   const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
   return res.json()
+}
+
+/**
+ * Fetch a video's meta.json, returning a synthesised fallback if it is absent
+ * (404) so that meta.json is not required for every video folder.
+ */
+async function fetchVideoMeta(folder) {
+  const url = `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (res.status === 404) return _defaultMeta(folder)
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
+    return res.json()
+  } catch (e) {
+    // Network error or parse failure — return safe default rather than
+    // crashing the entire browse page.
+    return _defaultMeta(folder)
+  }
+}
+
+function _defaultMeta(folder) {
+  return {
+    title: folder,
+    videoFile: `${folder}.mp4`,
+    bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
+    // duration intentionally omitted — will be detected from the video element
+  }
 }
 
 function framesToTimecode(frames, fps = 60) {
@@ -400,7 +422,7 @@ function buildCard(v) {
   const thumbSrc = v.thumbnail
     ? `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(v.thumbnail)}`
     : null
-  const timecode = framesToTimecode(v.duration || 0)
+  const timecode = v.duration ? framesToTimecode(v.duration) : null
   const highlights = (v.highlightedTags || []).slice(0, 3)
 
   const card = document.createElement('a')
@@ -417,20 +439,24 @@ function buildCard(v) {
     img.loading = 'lazy'
     img.addEventListener('error', () => {
       thumbDiv.innerHTML = thumbPlaceholder()
-      const dur = document.createElement('div')
-      dur.className = 'card-duration'
-      dur.textContent = timecode
-      thumbDiv.appendChild(dur)
+      if (timecode) {
+        const dur = document.createElement('div')
+        dur.className = 'card-duration'
+        dur.textContent = timecode
+        thumbDiv.appendChild(dur)
+      }
     })
     thumbDiv.appendChild(img)
   } else {
     thumbDiv.innerHTML = thumbPlaceholder()
   }
 
-  const durBadge = document.createElement('div')
-  durBadge.className = 'card-duration'
-  durBadge.textContent = timecode
-  thumbDiv.appendChild(durBadge)
+  if (timecode) {
+    const durBadge = document.createElement('div')
+    durBadge.className = 'card-duration'
+    durBadge.textContent = timecode
+    thumbDiv.appendChild(durBadge)
+  }
 
   card.appendChild(thumbDiv)
 
@@ -450,7 +476,7 @@ function buildCard(v) {
         </div>
         <div class="card-meta-item">
           <span>Duration</span>
-          <span>${timecode}</span>
+          <span>${timecode || '—'}</span>
         </div>
       </div>
     </div>
@@ -601,9 +627,7 @@ init()
         const manifest = await fetchJSON(`${VIDEO_BASE}/manifest.json`)
         const metas = await Promise.all(
           manifest.map((id) =>
-            fetchJSON(`${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`).then(
-              (m) => ({ ...m, _folder: id }),
-            ),
+            fetchVideoMeta(id).then((m) => ({ ...m, _folder: id })),
           ),
         )
         allVideos = metas

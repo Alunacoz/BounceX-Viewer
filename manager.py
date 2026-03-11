@@ -41,6 +41,45 @@ def write_json(path: Path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _synthesize_meta(folder_id: str, folder: Path) -> dict:
+    """
+    Build a minimal meta dict by scanning the folder when meta.json is absent.
+    Tries common naming conventions (folder-name.mp4 / .bx / thumb.jpg).
+    """
+    meta: dict = {"title": folder_id}
+
+    # Video file — try <folder>.mp4 then any .mp4 / .webm in the dir
+    for ext in (".mp4", ".webm", ".mkv", ".mov"):
+        if (folder / (folder_id + ext)).exists():
+            meta["videoFile"] = folder_id + ext
+            break
+    if "videoFile" not in meta:
+        for f in sorted(folder.iterdir()):
+            if f.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov"):
+                meta["videoFile"] = f.name
+                break
+
+    # BX file — try <folder>.bx then any .bx in the dir
+    bx_name = None
+    if (folder / (folder_id + ".bx")).exists():
+        bx_name = folder_id + ".bx"
+    else:
+        for f in sorted(folder.iterdir()):
+            if f.suffix.lower() == ".bx":
+                bx_name = f.name
+                break
+    if bx_name:
+        meta["bxFiles"] = [{"label": "Default", "file": bx_name}]
+
+    # Thumbnail
+    for thumb in ("thumb.jpg", "thumb.png", folder_id + ".jpg", folder_id + ".png"):
+        if (folder / thumb).exists():
+            meta["thumbnail"] = thumb
+            break
+
+    return meta
+
+
 # ── API: list videos ───────────────────────────────────────────────────────────
 
 def api_videos():
@@ -56,40 +95,44 @@ def api_videos():
         warnings = []
 
         if not meta_path.exists():
-            errors.append("meta.json missing")
-            results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
-            continue
+            # meta.json is optional — synthesise from folder contents instead
+            if not folder.exists():
+                errors.append("video folder missing")
+                results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
+                continue
+            meta = _synthesize_meta(folder_id, folder)
+            meta["_folder"] = folder_id
+            meta["_synthesized"] = True
+            warnings.append("meta.json missing")
+        else:
+            try:
+                meta = read_json(meta_path)
+            except Exception as e:
+                errors.append(f"meta.json unreadable: {e}")
+                results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
+                continue
+            meta["_folder"] = folder_id
 
-        try:
-            meta = read_json(meta_path)
-        except Exception as e:
-            errors.append(f"meta.json unreadable: {e}")
-            results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
-            continue
+        # Video file — normalise missing to <folder>.mp4 by convention
+        if not meta.get("videoFile"):
+            meta["videoFile"] = folder_id + ".mp4"
+        video_file = meta["videoFile"]
+        if not (folder / video_file).exists():
+            warnings.append(f"video file missing: {video_file}")
 
-        meta["_folder"] = folder_id
+        # Required: bx path file — normalise legacy bxFile so only bxFiles is checked
+        if not meta.get("bxFiles") and meta.get("bxFile"):
+            meta["bxFiles"] = [{"label": "Default", "file": meta["bxFile"]}]
 
-        # Required: video file
-        video_file = meta.get("videoFile")
-        if not video_file:
-            errors.append("videoFile not set in meta.json")
-        elif not (folder / video_file).exists():
-            errors.append(f"video file missing: {video_file}")
-
-        # Required: bx path file (bxFile or first entry of bxFiles)
         bx_files = meta.get("bxFiles")
-        bx_file  = meta.get("bxFile")
         if bx_files and isinstance(bx_files, list) and len(bx_files) > 0:
             bx_ref = bx_files[0].get("file") if isinstance(bx_files[0], dict) else None
             if not bx_ref:
                 errors.append("bxFiles[0].file not set in meta.json")
             elif not (folder / bx_ref).exists():
                 errors.append(f"bx file missing: {bx_ref}")
-        elif bx_file:
-            if not (folder / bx_file).exists():
-                errors.append(f"bx file missing: {bx_file}")
         else:
-            errors.append("no bxFile or bxFiles set in meta.json")
+            errors.append("no bxFiles set in meta.json")
 
         # Optional: thumbnail
         thumbnail = meta.get("thumbnail")
@@ -310,9 +353,10 @@ def api_write_meta(handler, section: str, folder_id: str):
     if not folder_id or "/" in folder_id or "\\" in folder_id or folder_id in (".", ".."):
         return {"error": "Invalid folder id"}, 400
     base = VIDEO_BASE if section == "videos" else PLAYLIST_BASE
-    meta_path = base / folder_id / "meta.json"
-    if not meta_path.exists():
-        return {"error": f"meta.json not found for {folder_id}"}, 404
+    folder_path = base / folder_id
+    meta_path = folder_path / "meta.json"
+    if not folder_path.exists():
+        return {"error": f'Folder not found for {folder_id}'}, 404
 
     content_length = int(handler.headers.get("Content-Length", 0))
     if content_length == 0:

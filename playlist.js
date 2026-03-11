@@ -46,11 +46,15 @@ async function loadPlaylist(id) {
           typeof entry === 'string' ? null : entry.bxFile || null
         return fetchJSON(
           `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
-        ).then((m) => ({
-          ...m,
-          _folder: folder,
-          _bxFile: bxOverride,
-        }))
+        ).then((m) => {
+          // Normalise missing videoFile — assume <folder>.mp4 by convention
+          if (!m.videoFile) m.videoFile = `${folder}.mp4`
+          // Normalise legacy single-file field
+          if (!m.bxFiles && m.bxFile) {
+            m.bxFiles = [{ label: 'Default', file: m.bxFile }]
+          }
+          return { ...m, _folder: folder, _bxFile: bxOverride }
+        })
       }),
     )
 
@@ -221,11 +225,10 @@ function setupPlaylistPlayer(playlist, metas) {
     if (activeEl)
       activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 
-    // Determine which bx file to load: per-entry override → first bxFiles entry → bxFile
+    // Determine which bx file to load: per-entry override → first bxFiles entry
     const bxFileToLoad =
       meta._bxFile ||
-      (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null) ||
-      meta.bxFile
+      (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null)
 
     let newPath
     let newTotalFrames = meta.duration || 14400
