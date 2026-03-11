@@ -38,6 +38,18 @@ This resolves most caching issues that may occur. This also may erase some setti
 
 **Need more help?** Check the existing examples in the `/videos/` directory for reference implementations or ask me directly on Discord! You can find me in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC), and my DMs are open!
 
+
+## TODO
+
+There's a lot to be done! The top of the list are features that I'm closer to finishing, and the bottom means it's low priority/very difficult.
+- Fix manager not being killed on Windows
+- Remove reliance on meta.json (Use video title and automatically figure out its duration if missing! Delete duration field altogether?)
+- In meta.json, allow a .bx file to have an offset.
+- Customizable path speed
+- Flesh out the manager, add "Create package..." button which streamlines package creation like YouTube uploads (need the above 2 first, so that those fields are included here)
+- In settings, create universal offset (to deal with delay in headphones? Need feedback on if this is actually necessary since every other site would have this problem too, no?)
+- OSSM/Other Machine support (I don't have any, so it's kinda hard to work on... I'm looking into [Buttplug.io](https://buttplug.io/) specifically though)
+
 ## Credits:
 
 Thank you to [Optiacku](https://github.com/clbhundley/BounceX) in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC) for creating the original concept for BounceX! (This project was not endorsed or encouraged by Optiacku, I merely made a more convenient way to view the .bx files)
