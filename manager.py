@@ -41,6 +41,42 @@ def write_json(path: Path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _synthesize_meta(folder_id: str, folder: Path) -> dict:
+    """
+    Build a minimal meta dict by scanning the folder when meta.json is absent.
+    Tries common naming conventions (folder-name.mp4 / .bx / thumb.jpg).
+    """
+    meta: dict = {"title": folder_id}
+
+    # Video file — try <folder>.mp4 then any .mp4 / .webm in the dir
+    for ext in (".mp4", ".webm", ".mkv", ".mov"):
+        if (folder / (folder_id + ext)).exists():
+            meta["videoFile"] = folder_id + ext
+            break
+    if "videoFile" not in meta:
+        for f in sorted(folder.iterdir()):
+            if f.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov"):
+                meta["videoFile"] = f.name
+                break
+
+    # BX file — try <folder>.bx then any .bx in the dir
+    if (folder / (folder_id + ".bx")).exists():
+        meta["bxFile"] = folder_id + ".bx"
+    else:
+        for f in sorted(folder.iterdir()):
+            if f.suffix.lower() == ".bx":
+                meta["bxFile"] = f.name
+                break
+
+    # Thumbnail
+    for thumb in ("thumb.jpg", "thumb.png", folder_id + ".jpg", folder_id + ".png"):
+        if (folder / thumb).exists():
+            meta["thumbnail"] = thumb
+            break
+
+    return meta
+
+
 # ── API: list videos ───────────────────────────────────────────────────────────
 
 def api_videos():
@@ -56,18 +92,23 @@ def api_videos():
         warnings = []
 
         if not meta_path.exists():
-            errors.append("meta.json missing")
-            results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
-            continue
-
-        try:
-            meta = read_json(meta_path)
-        except Exception as e:
-            errors.append(f"meta.json unreadable: {e}")
-            results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
-            continue
-
-        meta["_folder"] = folder_id
+            # meta.json is optional — synthesise from folder contents instead
+            if not folder.exists():
+                errors.append("video folder missing")
+                results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
+                continue
+            meta = _synthesize_meta(folder_id, folder)
+            meta["_folder"] = folder_id
+            meta["_synthesized"] = True
+            warnings.append("meta.json missing")
+        else:
+            try:
+                meta = read_json(meta_path)
+            except Exception as e:
+                errors.append(f"meta.json unreadable: {e}")
+                results.append({"_folder": folder_id, "_errors": errors, "_warnings": warnings})
+                continue
+            meta["_folder"] = folder_id
 
         # Required: video file
         video_file = meta.get("videoFile")
@@ -310,9 +351,10 @@ def api_write_meta(handler, section: str, folder_id: str):
     if not folder_id or "/" in folder_id or "\\" in folder_id or folder_id in (".", ".."):
         return {"error": "Invalid folder id"}, 400
     base = VIDEO_BASE if section == "videos" else PLAYLIST_BASE
-    meta_path = base / folder_id / "meta.json"
-    if not meta_path.exists():
-        return {"error": f"meta.json not found for {folder_id}"}, 404
+    folder_path = base / folder_id
+    meta_path = folder_path / "meta.json"
+    if not folder_path.exists():
+        return {"error": f'Folder not found for {folder_id}'}, 404
 
     content_length = int(handler.headers.get("Content-Length", 0))
     if content_length == 0:
