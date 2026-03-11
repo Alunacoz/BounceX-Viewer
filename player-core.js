@@ -372,9 +372,16 @@ function buildControlsHTML({
           ${flipYBtn}
           <span id="bxSelectWrap">${bxSelectHtml}</span>
 
+          <div class="controls-spacer"></div>
+
           <div class="volume-wrap zoom-wrap">
             <span style="font-family:var(--mono);font-size:0.68rem;color:var(--text3);letter-spacing:0.04em;white-space:nowrap">zoom</span>
             <input type="range" class="zoom-slider" id="zoomSlider" min="0.05" max="0.50" step="0.05" value="0.25">
+          </div>
+
+          <div class="volume-wrap zoom-wrap">
+            <span style="font-family:var(--mono);font-size:0.68rem;color:var(--text3);letter-spacing:0.04em;white-space:nowrap">speed</span>
+            <input type="range" class="zoom-slider" id="speedSlider" min="0.5" max="4.0" step="0.25" value="1.0">
           </div>
 
           <div class="volume-wrap">
@@ -452,6 +459,7 @@ function createPlayerEngine(opts) {
   const btnTheater = document.getElementById('btnTheater')
   const progressWrap = document.getElementById('progressWrap')
   const zoomSliderEl = document.getElementById('zoomSlider')
+  const speedSliderEl = document.getElementById('speedSlider')
   const flipYBtn = document.getElementById('flipYBtn') // null in playlist
 
   const COLORS = buildColors(userSettings)
@@ -479,6 +487,14 @@ function createPlayerEngine(opts) {
       ? userSettings.defaultZoom
       : 0.45
   zoomSliderEl.value = String(defaultZoom)
+
+  const defaultPathSpeed =
+    typeof userSettings.defaultPathSpeed === 'number' &&
+    userSettings.defaultPathSpeed >= 0.5 &&
+    userSettings.defaultPathSpeed <= 4.0
+      ? userSettings.defaultPathSpeed
+      : 1.0
+  speedSliderEl.value = String(defaultPathSpeed)
 
   // ── Initial UI state ────────────────────────────────────────────────────────
   overlayBtn.textContent = `overlay: ${isOverlay ? 'on' : 'off'}`
@@ -600,7 +616,8 @@ function createPlayerEngine(opts) {
     ctx.stroke()
 
     // Waveform path with horizontal fade gradient
-    const framesVisible = Math.ceil(W / PX_PER_FRAME) + 2
+    const pxPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
+    const framesVisible = Math.ceil(W / pxPerFrame) + 2
     const startFrame = Math.max(0, curFrame - Math.floor(framesVisible / 2))
     const endFrame = Math.min(totalFrames - 1, startFrame + framesVisible)
 
@@ -628,7 +645,7 @@ function createPlayerEngine(opts) {
     for (let f = startFrame; f <= endFrame; f++) {
       const d = activePath[f]
       if (d < 0) continue
-      const x = ballX + (f - curFrameExact) * PX_PER_FRAME
+      const x = ballX + (f - curFrameExact) * pxPerFrame
       const displayD = flipY ? 1 - d : d
       const y = bottomY + displayD * (topY - bottomY)
       if (!pathStarted) {

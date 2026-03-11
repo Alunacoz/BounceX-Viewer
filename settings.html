@@ -169,6 +169,22 @@
                 0.25
               </span>
             </label>
+            <label class="settings-row settings-row-slider">
+              <span class="settings-label">Default path speed</span>
+              <input
+                type="range"
+                id="defaultPathSpeed"
+                name="defaultPathSpeed"
+                class="settings-zoom-slider"
+                min="0.5"
+                max="4.0"
+                step="0.25"
+                value="1.0"
+              />
+              <span class="settings-zoom-value" id="defaultPathSpeedValue">
+                1.0×
+              </span>
+            </label>
           </section>
 
           <div class="settings-actions">
@@ -194,6 +210,8 @@
       const resetBtn = document.getElementById('resetBtn')
       const defaultZoomEl = document.getElementById('defaultZoom')
       const defaultZoomValue = document.getElementById('defaultZoomValue')
+      const defaultPathSpeedEl = document.getElementById('defaultPathSpeed')
+      const defaultPathSpeedValue = document.getElementById('defaultPathSpeedValue')
 
       function hexFromInput(colorInput) {
         return colorInput.value
@@ -214,6 +232,8 @@
         document.getElementById('defaultFlipY').checked = s.defaultFlipY
         document.getElementById('defaultZoom').value = String(s.defaultZoom)
         defaultZoomValue.textContent = s.defaultZoom
+        document.getElementById('defaultPathSpeed').value = String(s.defaultPathSpeed)
+        defaultPathSpeedValue.textContent = s.defaultPathSpeed + '×'
       }
 
       function rgbaToHex(rgba) {
@@ -228,6 +248,10 @@
 
       defaultZoomEl.addEventListener('input', () => {
         defaultZoomValue.textContent = defaultZoomEl.value
+      })
+
+      defaultPathSpeedEl.addEventListener('input', () => {
+        defaultPathSpeedValue.textContent = defaultPathSpeedEl.value + '×'
       })
 
       function flashMsg(text) {
@@ -252,9 +276,12 @@
           defaultOverlayBg: document.getElementById('defaultOverlayBg').checked,
           defaultFlipY: document.getElementById('defaultFlipY').checked,
           defaultZoom: parseFloat(document.getElementById('defaultZoom').value),
+          defaultPathSpeed: parseFloat(document.getElementById('defaultPathSpeed').value),
         })
         defaultZoomValue.textContent =
           document.getElementById('defaultZoom').value
+        defaultPathSpeedValue.textContent =
+          document.getElementById('defaultPathSpeed').value + '×'
         flashMsg('Saved!')
       })
 
