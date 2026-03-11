@@ -21,6 +21,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 📏 Path Size Control: Adjust path thickness to your preference!
 - 📦 Easy Imports: Just drag in a .zip file to add new videos!
 - 📱 Cross-Device Access: Watch on any device (including mobile!) on your local network!
+- 🏃 Path Speed Adjustment: Want to slow it down or speed it up? Go ahead!
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Getting Started
