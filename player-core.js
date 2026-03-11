@@ -410,6 +410,7 @@ function buildControlsHTML({
 //   userSettings object                from getSettings()
 //
 // Optional opts:
+//   offsetSecs   number               seconds before path starts (default 0)
 //   onEnded()                called when video ends (playlist: advance track)
 //   onFrame(frame, depth)    called every rAF with current integer frame + depth
 //   onSeeking()              called when video.seeking fires (show seeking overlay)
@@ -423,6 +424,7 @@ function buildControlsHTML({
 //   loadBxData(path, totalFrames)  swap in new path data (playlist: each track)
 //   resetSmoothTime()              reset smooth-time to 0 (playlist: each track)
 //   resizeCanvas()                 force a canvas resize (playlist: after loadTrack)
+//   setOffset(secs)                update path start offset in seconds
 
 function createPlayerEngine(opts) {
   const {
@@ -439,6 +441,8 @@ function createPlayerEngine(opts) {
     onPlaying,
     onProgress,
   } = opts
+
+  let offsetSecs = typeof opts.offsetSecs === 'number' ? opts.offsetSecs : 0
 
   const ctx = canvas.getContext('2d')
 
@@ -558,7 +562,7 @@ function createPlayerEngine(opts) {
 
     ctx.clearRect(0, 0, W, H)
 
-    const curFrameExact = Math.min(smoothTime * FPS, totalFrames - 1)
+    const curFrameExact = Math.min((smoothTime - offsetSecs) * FPS, totalFrames - 1)
     const curFrame = Math.floor(curFrameExact)
     const frac = curFrameExact - curFrame
     const ballX = W / 2
@@ -591,12 +595,14 @@ function createPlayerEngine(opts) {
     ctx.rect(0, EDGE_PAD, W, isOverlay ? H - EDGE_PAD : H - EDGE_PAD * 2)
     ctx.clip()
 
-    const depthA = activePath[curFrame] >= 0 ? activePath[curFrame] : 0
+    const depthA = curFrame >= 0 && activePath[curFrame] >= 0 ? activePath[curFrame] : 0
     const depthB =
-      activePath[Math.min(curFrame + 1, totalFrames - 1)] >= 0
-        ? activePath[Math.min(curFrame + 1, totalFrames - 1)]
-        : depthA
-    const curDepth = depthA + (depthB - depthA) * frac
+      curFrame >= 0
+        ? activePath[Math.min(curFrame + 1, totalFrames - 1)] >= 0
+          ? activePath[Math.min(curFrame + 1, totalFrames - 1)]
+          : depthA
+        : 0
+    const curDepth = depthA + (depthB - depthA) * (curFrame >= 0 ? frac : 0)
     const displayDepth = flipY ? 1 - curDepth : curDepth
     const ballY = bottomY + displayDepth * (topY - bottomY)
     const isNearTop = flipY ? curDepth <= 0.01 : curDepth >= 0.99
@@ -618,8 +624,8 @@ function createPlayerEngine(opts) {
     // Waveform path with horizontal fade gradient
     const pxPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
     const framesVisible = Math.ceil(W / pxPerFrame) + 2
-    const startFrame = Math.max(0, curFrame - Math.floor(framesVisible / 2))
-    const endFrame = Math.min(totalFrames - 1, startFrame + framesVisible)
+    const startFrame = Math.max(0, Math.floor(curFrameExact) - Math.floor(framesVisible / 2))
+    const endFrame = Math.min(totalFrames - 1, Math.max(0, Math.floor(curFrameExact)) + framesVisible)
 
     const pathRgb = COLORS.pathColor.match(/^#([0-9a-fA-F]{6})$/)
       ? (() => {
@@ -1035,5 +1041,9 @@ function createPlayerEngine(opts) {
     },
     /** Imperatively resize the canvas (used by playlist after loadTrack). */
     resizeCanvas,
+    /** Update the path start offset in seconds (0 = no offset). */
+    setOffset(secs) {
+      offsetSecs = typeof secs === 'number' && secs > 0 ? secs : 0
+    },
   }
 }
