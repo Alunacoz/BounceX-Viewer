@@ -47,6 +47,7 @@ There's a lot to be done! The top of the list are features that I'm closer to fi
 - In meta.json, allow a .bx file to have an offset.
 - Customizable path speed
 - Flesh out the manager, add "Create package..." button which streamlines package creation like YouTube uploads (need the above 2 first, so that those fields are included here)
+- Update Wiki with information on making new packages
 - In settings, create universal offset (to deal with delay in headphones? Need feedback on if this is actually necessary since every other site would have this problem too, no?)
 - OSSM/Other Machine support (I don't have any, so it's kinda hard to work on... I'm looking into [Buttplug.io](https://buttplug.io/) specifically though)
 
