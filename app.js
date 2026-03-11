@@ -417,12 +417,24 @@ function renderGrid() {
   })
 }
 
+function secsToTimecode(secs) {
+  const s = Math.floor(secs)
+  const mm = String(Math.floor(s / 60)).padStart(2, '0')
+  const ss = String(s % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
 function buildCard(v) {
   const folder = v._folder || v.videoId
   const thumbSrc = v.thumbnail
     ? `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(v.thumbnail)}`
     : null
-  const timecode = v.duration ? framesToTimecode(v.duration) : null
+  // Prefer durationSecs (stored at create time) → legacy duration in frames → probe
+  const timecode = v.durationSecs != null
+    ? secsToTimecode(v.durationSecs)
+    : v.duration
+      ? framesToTimecode(v.duration)
+      : null
   const highlights = (v.highlightedTags || []).slice(0, 3)
 
   const card = document.createElement('a')
@@ -432,6 +444,11 @@ function buildCard(v) {
   const thumbDiv = document.createElement('div')
   thumbDiv.className = 'card-thumb'
 
+  // Duration badge — always present, updated later if auto-detecting
+  const durBadge = document.createElement('div')
+  durBadge.className = 'card-duration'
+  durBadge.textContent = timecode || '\u2014'
+
   if (thumbSrc) {
     const img = document.createElement('img')
     img.src = thumbSrc
@@ -439,24 +456,13 @@ function buildCard(v) {
     img.loading = 'lazy'
     img.addEventListener('error', () => {
       thumbDiv.innerHTML = thumbPlaceholder()
-      if (timecode) {
-        const dur = document.createElement('div')
-        dur.className = 'card-duration'
-        dur.textContent = timecode
-        thumbDiv.appendChild(dur)
-      }
+      thumbDiv.appendChild(durBadge)
     })
     thumbDiv.appendChild(img)
   } else {
     thumbDiv.innerHTML = thumbPlaceholder()
   }
-
-  if (timecode) {
-    const durBadge = document.createElement('div')
-    durBadge.className = 'card-duration'
-    durBadge.textContent = timecode
-    thumbDiv.appendChild(durBadge)
-  }
+  thumbDiv.appendChild(durBadge)
 
   card.appendChild(thumbDiv)
 
@@ -472,16 +478,41 @@ function buildCard(v) {
       <div class="card-meta">
         <div class="card-meta-item">
           <span>BPM</span>
-          <span>${v.bpm || '—'}</span>
+          <span>${v.bpm || '\u2014'}</span>
         </div>
         <div class="card-meta-item">
           <span>Duration</span>
-          <span>${timecode || '—'}</span>
+          <span class="card-duration-meta">${timecode || '\u2014'}</span>
         </div>
       </div>
     </div>
   `,
   )
+
+  // If duration wasn't in meta.json, probe the video file for it
+  if (!timecode) {
+    const videoFile = v.videoFile || `${folder}.mp4`
+    const videoSrc = `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(videoFile)}`
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+    probe.muted = true
+    probe.style.display = 'none'
+    probe.addEventListener('loadedmetadata', () => {
+      if (probe.duration && isFinite(probe.duration)) {
+        const tc = secsToTimecode(probe.duration)
+        durBadge.textContent = tc
+        const metaSpan = card.querySelector('.card-duration-meta')
+        if (metaSpan) metaSpan.textContent = tc
+      }
+      probe.src = ''
+      probe.remove()
+    }, { once: true })
+    probe.addEventListener('error', () => {
+      probe.src = ''
+      probe.remove()
+    }, { once: true })
+    probe.src = videoSrc
+  }
 
   return card
 }
