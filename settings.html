@@ -302,6 +302,7 @@
         if (msgs.LinearCmd) caps.push('Linear')
         if (msgs.VibrateCmd) caps.push('Vibrate')
         if (msgs.RotateCmd) caps.push('Rotate')
+        console.log(`Device ${d.name} capabilities:`, caps)
         return caps.length ? caps.join(' · ') : 'Unknown'
       }
 
