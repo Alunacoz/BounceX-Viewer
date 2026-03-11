@@ -11,10 +11,8 @@ function Fail  { param($m) Write-Host "  !! $m" -ForegroundColor Red }
 # ── Header ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  BounceX Launcher" -ForegroundColor Cyan
-Write-Host "  ─────────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Host ""
 
-# ── 1. Find Python ─────────────────────────────────────────────────────────────
 Step "Checking for Python 3..."
 
 $pythonCmd = $null
