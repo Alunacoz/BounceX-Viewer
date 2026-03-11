@@ -16,6 +16,7 @@ const DEFAULTS = {
   defaultOverlayBg: false,
   defaultFlipY: false,
   defaultZoom: 0.25,
+  defaultPathSpeed: 1.0,
 }
 
 function getSettings() {
