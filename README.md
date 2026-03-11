@@ -45,6 +45,7 @@ This resolves most caching issues that may occur. This also may erase some setti
 There's a lot to be done! The top of the list are features that I'm closer to finishing, and the bottom means it's low priority/very difficult.
 - Allow the user to customize which ports are used for the website and manager
 - Make the start scripts show which URL to visit on other devices to access the site
+- Change the manager .json editor to use a similar layout to the create package button
 - Make a playlist creator in manager similar to the video package creator
 - In settings, create universal offset (to deal with delay in headphones? Need feedback on if this is actually necessary since every other site would have this problem too, no?)
 - OSSM/Other Machine support (I don't have any, so it's kinda hard to work on... I'm looking into [Buttplug.io](https://buttplug.io/) specifically though)
