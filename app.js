@@ -153,7 +153,7 @@ function _defaultMeta(folder) {
   return {
     title: folder,
     videoFile: `${folder}.mp4`,
-    bxFile: `${folder}.bx`,
+    bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
     // duration intentionally omitted — will be detected from the video element
   }
 }

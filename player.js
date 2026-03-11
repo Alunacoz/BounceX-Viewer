@@ -42,45 +42,35 @@ async function loadPlayer(id) {
       meta = await fetchJSON(`${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`)
     } catch (e) {
       if (/HTTP 404/.test(e.message)) {
-        meta = { title: id, videoFile: `${id}.mp4`, bxFile: `${id}.bx` }
+        meta = { title: id, videoFile: `${id}.mp4`, bxFiles: [{ label: 'Default', file: `${id}.bx` }] }
       } else {
         throw e
       }
     }
 
-    // Support both single bxFile and multiple bxFiles
-    const bxSources = meta.bxFiles
-      ? await Promise.all(
-          meta.bxFiles.map(async (b) => {
-            const url = `${VIDEO_BASE}/${encodeURIComponent(id)}/${encodeURIComponent(b.file)}`
-            const raw = await fetchText(url)
-            try {
-              return { label: b.label, file: b.file, data: JSON.parse(raw) }
-            } catch (e) {
-              throw new Error(
-                `Could not load bx file "${b.file}": ${e.message}`,
-              )
-            }
-          }),
-        )
-      : await (async () => {
-          const url = `${VIDEO_BASE}/${encodeURIComponent(id)}/${encodeURIComponent(meta.bxFile)}`
-          const raw = await fetchText(url)
-          try {
-            return [
-              { label: 'Default', file: meta.bxFile, data: JSON.parse(raw) },
-            ]
-          } catch (e) {
-            throw new Error(
-              `Could not load bx file "${meta.bxFile}": ${e.message}`,
-            )
-          }
-        })()
+    // Normalise legacy single-file field so all downstream code only sees bxFiles
+    if (!meta.bxFiles && meta.bxFile) {
+      meta.bxFiles = [{ label: 'Default', file: meta.bxFile }]
+    }
+    if (!meta.bxFiles || meta.bxFiles.length === 0) {
+      throw new Error('No bx path file specified in meta.json')
+    }
+
+    const bxSources = await Promise.all(
+      meta.bxFiles.map(async (b) => {
+        const url = `${VIDEO_BASE}/${encodeURIComponent(id)}/${encodeURIComponent(b.file)}`
+        const raw = await fetchText(url)
+        try {
+          return { label: b.label || 'Default', file: b.file, data: JSON.parse(raw) }
+        } catch (e) {
+          throw new Error(`Could not load bx file "${b.file}": ${e.message}`)
+        }
+      }),
+    )
 
     document.title = `${meta.title || id} – BounceX Viewer`
 
-    // Derive an initial frame count from the bx data so we never need
-    // meta.duration at all.  The real value is set via loadedmetadata below.
+    // Derive initial frame count from bx data — real value set via loadedmetadata
     const markerData = bxSources[0].data
     const maxBxFrame =
       Object.keys(markerData).reduce((m, k) => Math.max(m, parseInt(k)), 0) + 1
@@ -380,23 +370,18 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
   engine.loadBxData(path, totalFrames)
 
   // ── Auto-detect real duration from the video element ───────────────────────
-  // Once the browser knows the video length, rebuild the path with the correct
-  // frame count so the bx visualiser spans the full video precisely.
   function onVideoMetadataLoaded() {
     if (!Number.isFinite(video.duration) || video.duration <= 0) return
     const realFrames = Math.round(video.duration * FPS)
     totalFrames = realFrames
 
-    // Rebuild path for every loaded bx source so switching still works
     bxSources.forEach((src) => {
       src._path = buildPath(src.data, realFrames)
     })
 
-    // Reload the active bx source
     const activeIdx = bxSelect ? parseInt(bxSelect.value) || 0 : 0
     engine.loadBxData(bxSources[activeIdx]._path || path, realFrames)
 
-    // Update the visible stats
     const statDur = document.getElementById('statDuration')
     const statFr = document.getElementById('statFrames')
     if (statDur) statDur.textContent = framesToTimecode(realFrames)
@@ -404,10 +389,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
   }
 
   video.addEventListener('loadedmetadata', onVideoMetadataLoaded)
-  // If metadata is already available (e.g. cached), run immediately
   if (Number.isFinite(video.duration) && video.duration > 0) onVideoMetadataLoaded()
-
-  // ── Marker list interaction ─────────────────────────────────────────────────
   function wireMarkerClicks() {
     markerListEl.querySelectorAll('.marker-list-item').forEach((item) => {
       item.addEventListener('click', () => {

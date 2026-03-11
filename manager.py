@@ -60,13 +60,16 @@ def _synthesize_meta(folder_id: str, folder: Path) -> dict:
                 break
 
     # BX file — try <folder>.bx then any .bx in the dir
+    bx_name = None
     if (folder / (folder_id + ".bx")).exists():
-        meta["bxFile"] = folder_id + ".bx"
+        bx_name = folder_id + ".bx"
     else:
         for f in sorted(folder.iterdir()):
             if f.suffix.lower() == ".bx":
-                meta["bxFile"] = f.name
+                bx_name = f.name
                 break
+    if bx_name:
+        meta["bxFiles"] = [{"label": "Default", "file": bx_name}]
 
     # Thumbnail
     for thumb in ("thumb.jpg", "thumb.png", folder_id + ".jpg", folder_id + ".png"):
@@ -117,20 +120,19 @@ def api_videos():
         elif not (folder / video_file).exists():
             errors.append(f"video file missing: {video_file}")
 
-        # Required: bx path file (bxFile or first entry of bxFiles)
+        # Required: bx path file — normalise legacy bxFile so only bxFiles is checked
+        if not meta.get("bxFiles") and meta.get("bxFile"):
+            meta["bxFiles"] = [{"label": "Default", "file": meta["bxFile"]}]
+
         bx_files = meta.get("bxFiles")
-        bx_file  = meta.get("bxFile")
         if bx_files and isinstance(bx_files, list) and len(bx_files) > 0:
             bx_ref = bx_files[0].get("file") if isinstance(bx_files[0], dict) else None
             if not bx_ref:
                 errors.append("bxFiles[0].file not set in meta.json")
             elif not (folder / bx_ref).exists():
                 errors.append(f"bx file missing: {bx_ref}")
-        elif bx_file:
-            if not (folder / bx_file).exists():
-                errors.append(f"bx file missing: {bx_file}")
         else:
-            errors.append("no bxFile or bxFiles set in meta.json")
+            errors.append("no bxFiles set in meta.json")
 
         # Optional: thumbnail
         thumbnail = meta.get("thumbnail")
