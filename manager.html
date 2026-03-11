@@ -1595,7 +1595,7 @@
 
     <div class="manager-layout">
       <header class="site-header">
-        <a href="http://localhost:8000/index.html" class="site-logo">
+        <a href="#" data-main-page="index.html" class="site-logo">
           Bounce
           <span>X</span>
         </a>
@@ -1604,10 +1604,10 @@
           <span id="statusText">Manager</span>
         </div>
         <nav class="header-nav" style="margin-left: auto">
-          <a href="http://localhost:8000/index.html">Browse</a>
-          <a href="http://localhost:8000/about.html">About</a>
-          <a href="http://localhost:8000/settings.html">Settings</a>
-          <a href="http://localhost:8001/manager.html" class="active">
+          <a href="#" data-main-page="index.html">Browse</a>
+          <a href="#" data-main-page="about.html">About</a>
+          <a href="#" data-main-page="settings.html">Settings</a>
+          <a href="/manager.html" class="active">
             Manager
           </a>
         </nav>
@@ -2124,8 +2124,24 @@
     </div>
 
     <script>
-      const API = 'http://localhost:8001'
+      let API = ''  // Set dynamically from config
       let toastTimer = null
+
+      // Load config from manager server and set up dynamic URLs
+      ;(async function loadManagerConfig() {
+        try {
+          const res = await fetch('/manager-api/config', { cache: 'no-store' })
+          const cfg = await res.json()
+          API = 'http://' + location.hostname + ':' + cfg.managerPort
+          const mainUrl = 'http://' + location.hostname + ':' + cfg.httpPort
+          document.querySelectorAll('[data-main-page]').forEach(a => {
+            a.href = mainUrl + '/' + a.dataset.mainPage
+          })
+        } catch {
+          // Fallback: assume same origin for API
+          API = location.origin
+        }
+      })()
 
       // ── Drag-and-drop reorder ─────────────────────────────────────────────
       let _dragSrc = null

@@ -86,10 +86,15 @@ if (Test-Path "bump-sw.py") {
     & $py bump-sw.py 2>$null
 }
 
-# ── 5. Launch servers ──────────────────────────────────────────────────────────
+# ── 5. Read config ─────────────────────────────────────────────────────────────
+$configRaw = Get-Content "config.json" -Raw | ConvertFrom-Json
+$httpPort = $configRaw.httpPort
+$managerPort = $configRaw.managerPort
+
+# ── 6. Launch servers ──────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  Browse   ->  http://localhost:8000" -ForegroundColor White
-Write-Host "  Manager  ->  http://localhost:8001" -ForegroundColor White
+Write-Host "  Browse   ->  http://localhost:$httpPort" -ForegroundColor White
+Write-Host "  Manager  ->  http://localhost:$managerPort" -ForegroundColor White
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop both servers." -ForegroundColor DarkGray
 Write-Host ""
@@ -106,13 +111,13 @@ try {
     Ok "Manager started (PID $($managerProc.Id))"
 
     $serverProc = Start-Process -FilePath $py `
-        -ArgumentList "-m", "RangeHTTPServer", "8000", "--bind", "0.0.0.0" `
+        -ArgumentList "-m", "RangeHTTPServer", "$httpPort", "--bind", "0.0.0.0" `
         -WorkingDirectory $PSScriptRoot `
         -WindowStyle Hidden `
         -PassThru
     Ok "HTTP server started (PID $($serverProc.Id))"
 
-    Start-Process "http://localhost:8000"
+    Start-Process "http://localhost:$httpPort"
 
     # Block here until Ctrl+C or a process dies
     while ($true) {
