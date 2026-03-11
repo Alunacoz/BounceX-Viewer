@@ -351,6 +351,12 @@ function buildControlsHTML({
 
           <div class="controls-spacer"></div>
 
+          <!-- Intiface / Buttplug status pill (hidden unless enabled) -->
+          <div class="bp-player-status" id="bpPlayerStatus" title="Device sync status">
+            <span class="intiface-status-dot" id="bpPlayerDot"></span>
+            <span class="bp-player-status-label" id="bpPlayerLabel">device</span>
+          </div>
+
           <button class="ctrl-btn" id="btnTheater" title="Theater mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="theaterIcon">
               <rect x="2" y="4" width="20" height="16" rx="2"/>

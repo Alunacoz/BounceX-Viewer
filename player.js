@@ -332,6 +332,15 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     if (curFrameEl) curFrameEl.textContent = curFrame
     if (curDepthEl) curDepthEl.textContent = curDepth.toFixed(3)
 
+    // ── Buttplug / Intiface depth output ─────────────────────────────────────
+    if (
+      window.BpBridge &&
+      window.BpBridge.connected &&
+      userSettings.intifaceEnabled
+    ) {
+      window.BpBridge.sendDepth(curDepth, video)
+    }
+
     let nearestIdx = -1,
       nearestDist = Infinity
     activeMarkers.forEach((m, i) => {
@@ -366,6 +375,58 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
   })
 
   engine.loadBxData(path, totalFrames)
+  if (window.BpBridge) window.BpBridge.setPath(path, totalFrames)
+
+  // ── Intiface / Buttplug player status pill ─────────────────────────────────
+  const bpStatusEl = document.getElementById('bpPlayerStatus')
+  const bpDotEl = document.getElementById('bpPlayerDot')
+  const bpLabelEl = document.getElementById('bpPlayerLabel')
+
+  function updateBpPill() {
+    if (!bpStatusEl || !userSettings.intifaceEnabled) {
+      if (bpStatusEl) bpStatusEl.classList.remove('visible')
+      return
+    }
+    bpStatusEl.classList.add('visible')
+    if (!window.BpBridge) {
+      bpDotEl.className = 'intiface-status-dot error'
+      bpLabelEl.textContent = 'no bridge'
+      return
+    }
+    if (window.BpBridge.connected) {
+      const devs = window.BpBridge.deviceList
+      bpDotEl.className = 'intiface-status-dot connected'
+      bpLabelEl.textContent = devs.length
+        ? devs.map((d) => d.name.split(' ')[0]).join(', ')
+        : 'connected'
+    } else {
+      bpDotEl.className = 'intiface-status-dot'
+      bpLabelEl.textContent = 'disconnected'
+    }
+  }
+
+  if (window.BpBridge) {
+    const _prevStatus = BpBridge.onStatusChange
+    BpBridge.onStatusChange = (status, msg) => {
+      if (_prevStatus) _prevStatus(status, msg)
+      updateBpPill()
+    }
+    const _prevDevices = BpBridge.onDevicesChange
+    BpBridge.onDevicesChange = (devs) => {
+      if (_prevDevices) _prevDevices(devs)
+      updateBpPill()
+    }
+
+    // Auto-connect if enabled and not already connected
+    if (userSettings.intifaceEnabled && !BpBridge.connected) {
+      const url = userSettings.intifaceUrl || 'ws://localhost:12345'
+      BpBridge.connect(url).then(() => {
+        if (BpBridge.connected) BpBridge.startScanning()
+      })
+    }
+  }
+
+  updateBpPill()
 
   // ── Marker list interaction ─────────────────────────────────────────────────
   function wireMarkerClicks() {
@@ -408,6 +469,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
       const newMarkers = markersFromData(src.data)
       const newPath = buildPath(src.data, totalFrames)
       engine.loadBxData(newPath, totalFrames)
+      if (window.BpBridge) window.BpBridge.setPath(newPath, totalFrames)
       activeMarkers = newMarkers
       document.getElementById('sidebarBxFile').textContent = src.file
       rebuildMarkerList(newMarkers)

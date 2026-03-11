@@ -160,15 +160,81 @@
                 id="defaultZoom"
                 name="defaultZoom"
                 class="settings-zoom-slider"
-                min="0.05"
-                max="0.5"
+                min="0.10"
+                max="1.0"
                 step="0.05"
-                value="0.25"
+                value="0.45"
               />
               <span class="settings-zoom-value" id="defaultZoomValue">
-                0.25
+                0.45
               </span>
             </label>
+          </section>
+
+          <section class="settings-section" id="intifaceSection">
+            <h2 class="settings-section-title">Intiface / Device Control</h2>
+            <p class="settings-hint">
+              Connect to
+              <a
+                href="https://intiface.com/central"
+                target="_blank"
+                rel="noopener"
+                class="settings-link"
+              >
+                Intiface Central
+              </a>
+              to sync depth data with compatible devices (strokers, vibrators,
+              etc.) while a video plays. Intiface Central must be running on the
+              same machine or network.
+            </p>
+
+            <div class="settings-checkboxes">
+              <label class="settings-check">
+                <input
+                  type="checkbox"
+                  id="intifaceEnabled"
+                  name="intifaceEnabled"
+                />
+                <span>Enable device sync during playback</span>
+              </label>
+            </div>
+
+            <label
+              class="settings-row settings-row-text"
+              style="margin-top: 1rem"
+            >
+              <span class="settings-label">Intiface WebSocket URL</span>
+              <input
+                type="text"
+                id="intifaceUrl"
+                name="intifaceUrl"
+                class="settings-text-input"
+                placeholder="ws://localhost:12345"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <p class="settings-hint" style="margin-top: 0.35rem">
+              Use
+              <code>ws://localhost:12345</code>
+              if Intiface is on this machine, or
+              <code>ws://192.168.x.x:12345</code>
+              for another device on your local network.
+            </p>
+
+            <!-- Live connection test panel (shown on watch page too) -->
+            <div class="intiface-test-row">
+              <button
+                type="button"
+                id="intifaceTestBtn"
+                class="settings-btn settings-btn-secondary"
+              >
+                Test Connection
+              </button>
+              <span class="intiface-status-dot" id="intifaceTestDot"></span>
+              <span class="intiface-test-msg" id="intifaceTestMsg"></span>
+            </div>
+            <div class="intiface-device-list" id="intifaceDeviceList"></div>
           </section>
 
           <div class="settings-actions">
@@ -188,6 +254,8 @@
       </div>
     </main>
 
+    <script src="buttplug.js"></script>
+    <script src="buttplug-bridge.js"></script>
     <script src="settings.js"></script>
     <script>
       const form = document.getElementById('settingsForm')
@@ -198,6 +266,77 @@
       function hexFromInput(colorInput) {
         return colorInput.value
       }
+
+      // ── Intiface connection test ───────────────────────────────────────────
+      const testBtn = document.getElementById('intifaceTestBtn')
+      const testDot = document.getElementById('intifaceTestDot')
+      const testMsg = document.getElementById('intifaceTestMsg')
+      const deviceListEl = document.getElementById('intifaceDeviceList')
+
+      function setTestStatus(status, msg) {
+        testDot.className = 'intiface-status-dot ' + status
+        testMsg.textContent = msg
+      }
+
+      function renderDevices(devs) {
+        if (!devs || devs.length === 0) {
+          deviceListEl.innerHTML =
+            '<span class="intiface-no-devices">No devices found. Make sure Intiface is scanning.</span>'
+          return
+        }
+        deviceListEl.innerHTML = devs
+          .map(
+            (d) =>
+              `<div class="intiface-device-item">
+            <span class="intiface-device-dot"></span>
+            <span class="intiface-device-name">${d.name}</span>
+            <span class="intiface-device-caps">${_deviceCaps(d)}</span>
+          </div>`,
+          )
+          .join('')
+      }
+
+      function _deviceCaps(d) {
+        const msgs = d.messageAttributes || {}
+        const caps = []
+        if (msgs.LinearCmd) caps.push('Linear')
+        if (msgs.VibrateCmd) caps.push('Vibrate')
+        if (msgs.RotateCmd) caps.push('Rotate')
+        return caps.length ? caps.join(' · ') : 'Unknown'
+      }
+
+      if (typeof BpBridge !== 'undefined') {
+        BpBridge.onStatusChange = (status, msg) => {
+          if (status === 'connecting') setTestStatus('connecting', msg)
+          else if (status === 'connected') {
+            setTestStatus('connected', msg)
+            BpBridge.startScanning()
+          } else if (status === 'error') setTestStatus('error', msg)
+          else setTestStatus('', msg)
+        }
+        BpBridge.onDevicesChange = (devs) => renderDevices(devs)
+      }
+
+      testBtn.addEventListener('click', async () => {
+        if (typeof BpBridge === 'undefined' || !window.buttplug) {
+          setTestStatus(
+            'error',
+            "buttplug.js not loaded — make sure it's in your project folder.",
+          )
+          return
+        }
+        const url =
+          document.getElementById('intifaceUrl').value.trim() ||
+          'ws://localhost:12345'
+        if (BpBridge.connected) {
+          await BpBridge.disconnect()
+          testBtn.textContent = 'Test Connection'
+          deviceListEl.innerHTML = ''
+          return
+        }
+        testBtn.textContent = 'Disconnect'
+        await BpBridge.connect(url)
+      })
 
       function loadSettings() {
         const s = getSettings()
@@ -213,6 +352,9 @@
         document.getElementById('defaultOverlayBg').checked = s.defaultOverlayBg
         document.getElementById('defaultFlipY').checked = s.defaultFlipY
         document.getElementById('defaultZoom').value = String(s.defaultZoom)
+        document.getElementById('intifaceEnabled').checked = s.intifaceEnabled
+        document.getElementById('intifaceUrl').value =
+          s.intifaceUrl || 'ws://localhost:12345'
         defaultZoomValue.textContent = s.defaultZoom
       }
 
@@ -252,6 +394,10 @@
           defaultOverlayBg: document.getElementById('defaultOverlayBg').checked,
           defaultFlipY: document.getElementById('defaultFlipY').checked,
           defaultZoom: parseFloat(document.getElementById('defaultZoom').value),
+          intifaceEnabled: document.getElementById('intifaceEnabled').checked,
+          intifaceUrl:
+            document.getElementById('intifaceUrl').value.trim() ||
+            'ws://localhost:12345',
         })
         defaultZoomValue.textContent =
           document.getElementById('defaultZoom').value

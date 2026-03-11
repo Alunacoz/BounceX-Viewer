@@ -16,6 +16,8 @@ const DEFAULTS = {
   defaultOverlayBg: false,
   defaultFlipY: false,
   defaultZoom: 0.25,
+  intifaceEnabled: false,
+  intifaceUrl: 'ws://localhost:12345',
 }
 
 function getSettings() {
