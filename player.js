@@ -361,7 +361,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     canvas,
     bxWrap,
     userSettings,
-    offsetSecs: typeof meta.offset === 'number' ? meta.offset : 0,
+    offsetSecs: typeof meta.offset === 'number' ? meta.offset / 1000 : 0,
     onSeeking,
     onSeeked,
     onCanPlay,
