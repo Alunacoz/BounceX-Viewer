@@ -48,6 +48,9 @@ async function loadPlayer(id) {
       }
     }
 
+    // Normalise missing videoFile — assume <folder>.mp4 by convention
+    if (!meta.videoFile) meta.videoFile = `${id}.mp4`
+
     // Normalise legacy single-file field so all downstream code only sees bxFiles
     if (!meta.bxFiles && meta.bxFile) {
       meta.bxFiles = [{ label: 'Default', file: meta.bxFile }]

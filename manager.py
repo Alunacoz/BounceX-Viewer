@@ -113,12 +113,12 @@ def api_videos():
                 continue
             meta["_folder"] = folder_id
 
-        # Required: video file
-        video_file = meta.get("videoFile")
-        if not video_file:
-            errors.append("videoFile not set in meta.json")
-        elif not (folder / video_file).exists():
-            errors.append(f"video file missing: {video_file}")
+        # Video file — normalise missing to <folder>.mp4 by convention
+        if not meta.get("videoFile"):
+            meta["videoFile"] = folder_id + ".mp4"
+        video_file = meta["videoFile"]
+        if not (folder / video_file).exists():
+            warnings.append(f"video file missing: {video_file}")
 
         # Required: bx path file — normalise legacy bxFile so only bxFiles is checked
         if not meta.get("bxFiles") and meta.get("bxFile"):

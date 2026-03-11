@@ -47,6 +47,8 @@ async function loadPlaylist(id) {
         return fetchJSON(
           `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
         ).then((m) => {
+          // Normalise missing videoFile — assume <folder>.mp4 by convention
+          if (!m.videoFile) m.videoFile = `${folder}.mp4`
           // Normalise legacy single-file field
           if (!m.bxFiles && m.bxFile) {
             m.bxFiles = [{ label: 'Default', file: m.bxFile }]
