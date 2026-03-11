@@ -2,7 +2,7 @@
 """
 BounceX Manager Server
 Run with:  python manager.py
-Opens http://localhost:8001/manager.html automatically.
+Opens the manager page automatically.
 """
 
 import io
@@ -16,10 +16,16 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-PORT = 8001
 ROOT = Path(__file__).parent.resolve()
 VIDEO_BASE = ROOT / "videos"
 PLAYLIST_BASE = ROOT / "playlists"
+
+# Read ports from the shared config file
+_config_path = ROOT / "config.json"
+with open(_config_path, "r", encoding="utf-8") as _f:
+    _config = json.load(_f)
+PORT = _config["managerPort"]
+HTTP_PORT = _config["httpPort"]
 MANAGER_URL = f"http://localhost:{PORT}/manager.html"
 
 # Increments on every write operation so the main site can detect changes
@@ -563,7 +569,9 @@ class ManagerHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path.rstrip("/")
-        if path == "/manager-api/version":
+        if path == "/manager-api/config":
+            self._send_json({"httpPort": HTTP_PORT, "managerPort": PORT})
+        elif path == "/manager-api/version":
             self._send_json({"version": _version})
         elif path == "/manager-api/videos":
             self._send_json(*api_videos())

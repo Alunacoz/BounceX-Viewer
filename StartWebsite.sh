@@ -69,6 +69,10 @@ fi
 
 python3 bump-sw.py
 
+# Read ports from config.json
+HTTP_PORT=$(python3 -c "import json; print(json.load(open('config.json'))['httpPort'])")
+MANAGER_PORT=$(python3 -c "import json; print(json.load(open('config.json'))['managerPort'])")
+
 # Start manager in background
 echo "Starting manager in background..."
 python3 manager.py &
@@ -77,7 +81,9 @@ MANAGER_PID=$!
 trap "kill $MANAGER_PID 2>/dev/null" EXIT
 
 # Start main server
-echo "Starting HTTP Server on port 8000..."
+echo "Starting HTTP Server on port $HTTP_PORT..."
+echo "  Browse   ->  http://localhost:$HTTP_PORT"
+echo "  Manager  ->  http://localhost:$MANAGER_PORT"
 echo "Press Ctrl+C to stop."
 echo ""
-python3 -m RangeHTTPServer 8000 --bind 0.0.0.0
+python3 -m RangeHTTPServer "$HTTP_PORT" --bind 0.0.0.0

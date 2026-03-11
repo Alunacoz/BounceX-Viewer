@@ -641,7 +641,9 @@ init()
 
 // ── Live reload from Manager ───────────────────────────────────────────────────
 ;(async function startManagerSync() {
-  const MANAGER_API = 'http://localhost:8001/manager-api/version'
+  const cfg = window._bxConfigP ? await window._bxConfigP : null
+  if (!cfg) return // Can't reach config, skip manager sync
+  const MANAGER_API = 'http://' + location.hostname + ':' + cfg.managerPort + '/manager-api/version'
   let lastVersion = null
 
   async function poll() {
