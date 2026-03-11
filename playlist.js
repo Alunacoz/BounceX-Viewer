@@ -46,15 +46,11 @@ async function loadPlaylist(id) {
           typeof entry === 'string' ? null : entry.bxFile || null
         return fetchJSON(
           `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
-        ).then((m) => {
-          // Normalise missing videoFile — assume <folder>.mp4 by convention
-          if (!m.videoFile) m.videoFile = `${folder}.mp4`
-          // Normalise legacy single-file field
-          if (!m.bxFiles && m.bxFile) {
-            m.bxFiles = [{ label: 'Default', file: m.bxFile }]
-          }
-          return { ...m, _folder: folder, _bxFile: bxOverride }
-        })
+        ).then((m) => ({
+          ...m,
+          _folder: folder,
+          _bxFile: bxOverride,
+        }))
       }),
     )
 
@@ -225,10 +221,11 @@ function setupPlaylistPlayer(playlist, metas) {
     if (activeEl)
       activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 
-    // Determine which bx file to load: per-entry override → first bxFiles entry
+    // Determine which bx file to load: per-entry override → first bxFiles entry → bxFile
     const bxFileToLoad =
       meta._bxFile ||
-      (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null)
+      (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null) ||
+      meta.bxFile
 
     let newPath
     let newTotalFrames = meta.duration || 14400
@@ -244,6 +241,7 @@ function setupPlaylistPlayer(playlist, metas) {
     }
 
     engine.loadBxData(newPath, newTotalFrames)
+    engine.setOffset(typeof meta.offset === 'number' ? meta.offset : 0)
     engine.resetSmoothTime()
 
     // Rebuild the bx-file dropdown for this track (shown when a track has multiple .bx files)
