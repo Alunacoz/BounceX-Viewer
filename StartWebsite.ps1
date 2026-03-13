@@ -91,10 +91,20 @@ $configRaw = Get-Content "config.json" -Raw | ConvertFrom-Json
 $httpPort = $configRaw.httpPort
 $managerPort = $configRaw.managerPort
 
-# ── 6. Launch servers ──────────────────────────────────────────────────────────
+# ── 6. Detect local IP ────────────────────────────────────────────────────────
+$localIP = $null
+try {
+    $localIP = (Get-NetIPAddress -AddressFamily IPv4 |
+        Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+        Sort-Object PrefixLength |
+        Select-Object -First 1).IPAddress
+} catch { }
+if (-not $localIP) { $localIP = "localhost" }
+
+# ── 7. Launch servers ──────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  Browse   ->  http://localhost:$httpPort" -ForegroundColor White
-Write-Host "  Manager  ->  http://localhost:$managerPort" -ForegroundColor White
+Write-Host "  On your local network, open this URL on any device:" -ForegroundColor Cyan
+Write-Host "  Home page  ->  http://${localIP}:$httpPort" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop both servers." -ForegroundColor DarkGray
 Write-Host ""

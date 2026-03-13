@@ -655,8 +655,6 @@ class ManagerHandler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = HTTPServer(("0.0.0.0", PORT), ManagerHandler)
-    print(f"  BounceX Manager  →  {MANAGER_URL}")
-    print(f"  Press Ctrl+C to stop.\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
