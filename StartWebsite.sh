@@ -73,6 +73,21 @@ python3 bump-sw.py
 HTTP_PORT=$(python3 -c "import json; print(json.load(open('config.json'))['httpPort'])")
 MANAGER_PORT=$(python3 -c "import json; print(json.load(open('config.json'))['managerPort'])")
 
+# Detect local IP (works on Linux and macOS)
+LOCAL_IP=""
+if command -v ip &>/dev/null; then
+    LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{print $7; exit}')
+fi
+if [[ -z "$LOCAL_IP" ]] && command -v ipconfig &>/dev/null; then
+    LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null)
+fi
+if [[ -z "$LOCAL_IP" ]]; then
+    LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+fi
+if [[ -z "$LOCAL_IP" ]]; then
+    LOCAL_IP="localhost"
+fi
+
 # Start manager in background
 echo "Starting manager in background..."
 python3 manager.py &
@@ -81,9 +96,9 @@ MANAGER_PID=$!
 trap "kill $MANAGER_PID 2>/dev/null" EXIT
 
 # Start main server
-echo "Starting HTTP Server on port $HTTP_PORT..."
-echo "  Browse   ->  http://localhost:$HTTP_PORT"
-echo "  Manager  ->  http://localhost:$MANAGER_PORT"
+echo "  On your local network, open this URL on any device:"
+echo "  Home page  ->  http://$LOCAL_IP:$HTTP_PORT"
+echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 python3 -m RangeHTTPServer "$HTTP_PORT" --bind 0.0.0.0
