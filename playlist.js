@@ -149,7 +149,11 @@ function buildPlaylistHTML(playlist, metas) {
             : ''
         }
       </div>
-      ${playlist.description ? `<p class="video-description" style="margin-top:1rem"><strong>Playlist Description:</strong> ${escHtml(playlist.description)}</p>` : ''}
+      ${playlist.description
+          ? (Array.isArray(playlist.description)
+              ? playlist.description.map(p => `<p class="video-description" style="margin-top:1rem">${renderDescription(p)}</p>`).join('')
+              : `<p class="video-description" style="margin-top:1rem">${renderDescription(playlist.description)}</p>`)
+          : ''}
     </div>
   </div>
 

@@ -561,6 +561,332 @@ def api_create_video(handler):
         return {"error": f"Failed to create package: {e}"}, 500
 
 
+# ── API: update video package ──────────────────────────────────────────────────
+
+def api_update_video(handler, folder_id: str):
+    if not folder_id or '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+        return {"error": "Invalid folder id"}, 400
+
+    ct = handler.headers.get('Content-Type', '')
+    if 'multipart/form-data' not in ct:
+        return {"error": "Expected multipart/form-data"}, 400
+
+    folder_path = VIDEO_BASE / folder_id
+    if not folder_path.exists():
+        return {"error": f'Folder not found: {folder_id}'}, 404
+
+    try:
+        fields, files = parse_multipart_form(handler)
+    except Exception as e:
+        return {"error": f"Failed to parse form data: {e}"}, 400
+
+    # ── Parse meta ──────────────────────────────────────────────────────────
+    try:
+        meta = json.loads(fields.get('meta', '{}'))
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid meta JSON: {e}"}, 400
+
+    # ── Handle folder rename ────────────────────────────────────────────────
+    new_folder_id = fields.get('newFolderId', folder_id).strip()
+    if not new_folder_id:
+        new_folder_id = folder_id
+    if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
+        return {"error": "Invalid new folder ID"}, 400
+
+    if new_folder_id != folder_id:
+        new_folder_path = VIDEO_BASE / new_folder_id
+        if new_folder_path.exists():
+            return {"error": f'Folder "{new_folder_id}" already exists'}, 409
+        # Rename the folder on disk
+        folder_path.rename(new_folder_path)
+        folder_path = new_folder_path
+        # Update manifest
+        manifest_path = VIDEO_BASE / 'manifest.json'
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+            if folder_id in manifest:
+                idx = manifest.index(folder_id)
+                manifest[idx] = new_folder_id
+                write_json(manifest_path, manifest)
+
+    try:
+        # ── Video file (optional replacement) ──────────────────────────────
+        if 'video' in files:
+            video_filename, video_bytes = files['video']
+            if video_filename and video_bytes:
+                # Remove old video file if different name
+                old_video = meta.get('videoFile')
+                if old_video and old_video != video_filename:
+                    old_path = folder_path / old_video
+                    if old_path.exists():
+                        old_path.unlink()
+                with open(folder_path / video_filename, 'wb') as f:
+                    f.write(video_bytes)
+                meta['videoFile'] = video_filename
+
+        # ── Thumbnail (optional replacement) ───────────────────────────────
+        if 'thumbnail' in files:
+            thumb_filename, thumb_bytes = files['thumbnail']
+            if thumb_filename and thumb_bytes:
+                old_thumb = meta.get('thumbnail')
+                if old_thumb and old_thumb != thumb_filename:
+                    old_path = folder_path / old_thumb
+                    if old_path.exists():
+                        old_path.unlink()
+                with open(folder_path / thumb_filename, 'wb') as f:
+                    f.write(thumb_bytes)
+                meta['thumbnail'] = thumb_filename
+
+        # ── BX files ────────────────────────────────────────────────────────
+        # Each slot is either a new upload (bxFile_N) or a keep-existing ref (bxExistingFile_N)
+        bx_count_str = fields.get('bxCount', '')
+        if bx_count_str.isdigit():
+            bx_count = int(bx_count_str)
+            bx_files_meta = []
+            for i in range(bx_count):
+                label = fields.get(f'bxLabel_{i}', 'Default')
+                if f'bxFile_{i}' in files:
+                    bx_filename, bx_bytes = files[f'bxFile_{i}']
+                    if bx_filename and bx_bytes:
+                        with open(folder_path / bx_filename, 'wb') as f:
+                            f.write(bx_bytes)
+                        bx_files_meta.append({"label": label, "file": bx_filename})
+                elif f'bxExistingFile_{i}' in fields:
+                    existing_name = fields[f'bxExistingFile_{i}']
+                    if existing_name:
+                        bx_files_meta.append({"label": label, "file": existing_name})
+            if bx_files_meta:
+                meta['bxFiles'] = bx_files_meta
+
+        # Write meta.json
+        write_json(folder_path / 'meta.json', meta)
+        bump_version()
+        return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
+
+    except Exception as e:
+        return {"error": f"Failed to update package: {e}"}, 500
+
+
+# ── Playlist duration tally ────────────────────────────────────────────────────
+
+def _tally_playlist_duration(videos: list) -> float | None:
+    """
+    Sum durationSecs across all video entries in a playlist.
+    Falls back to duration-in-frames / 60 fps if durationSecs is absent.
+    Returns None if no video has any duration info.
+    """
+    total = 0.0
+    found_any = False
+    for entry in videos:
+        folder_id = entry if isinstance(entry, str) else (entry.get('id') or entry.get('videoId') or '')
+        if not folder_id:
+            continue
+        meta_path = VIDEO_BASE / folder_id / 'meta.json'
+        try:
+            meta = read_json(meta_path)
+        except Exception:
+            continue
+        if meta.get('durationSecs') is not None:
+            total += float(meta['durationSecs'])
+            found_any = True
+        elif meta.get('duration') is not None:
+            total += float(meta['duration']) / 60.0   # frames @ 60 fps
+            found_any = True
+    return total if found_any else None
+
+
+# ── API: create playlist ───────────────────────────────────────────────────────
+
+def api_create_playlist(handler):
+    ct = handler.headers.get('Content-Type', '')
+    if 'multipart/form-data' not in ct:
+        return {"error": "Expected multipart/form-data"}, 400
+
+    try:
+        fields, files = parse_multipart_form(handler)
+    except Exception as e:
+        return {"error": f"Failed to parse form data: {e}"}, 400
+
+    folder_id = fields.get('folderId', '').strip()
+    if not folder_id:
+        return {"error": "folderId is required"}, 400
+    if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+        return {"error": "Invalid folder ID"}, 400
+
+    folder_path = PLAYLIST_BASE / folder_id
+    if folder_path.exists():
+        return {"error": f'Folder "{folder_id}" already exists'}, 409
+
+    try:
+        meta = json.loads(fields.get('meta', '{}'))
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid meta JSON: {e}"}, 400
+
+    folder_path.mkdir(parents=True, exist_ok=False)
+    try:
+        if 'thumbnail' in files:
+            thumb_filename, thumb_bytes = files['thumbnail']
+            if thumb_filename and thumb_bytes:
+                with open(folder_path / thumb_filename, 'wb') as f:
+                    f.write(thumb_bytes)
+                meta['thumbnail'] = thumb_filename
+
+        # Tally total runtime from video metas
+        total_dur = _tally_playlist_duration(meta.get('videos', []))
+        if total_dur is not None:
+            meta['totalDurationSecs'] = round(total_dur, 3)
+
+        write_json(folder_path / 'meta.json', meta)
+
+        manifest_path = PLAYLIST_BASE / 'manifest.json'
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+        else:
+            PLAYLIST_BASE.mkdir(parents=True, exist_ok=True)
+            manifest = []
+        manifest.insert(0, folder_id)
+        write_json(manifest_path, manifest)
+        bump_version()
+        return {"created": folder_id}, 200
+
+    except Exception as e:
+        if folder_path.exists():
+            shutil.rmtree(folder_path)
+        return {"error": f"Failed to create playlist: {e}"}, 500
+
+
+# ── API: update playlist ───────────────────────────────────────────────────────
+
+def api_update_playlist(handler, folder_id: str):
+    if not folder_id or '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+        return {"error": "Invalid folder id"}, 400
+
+    ct = handler.headers.get('Content-Type', '')
+    if 'multipart/form-data' not in ct:
+        return {"error": "Expected multipart/form-data"}, 400
+
+    folder_path = PLAYLIST_BASE / folder_id
+    if not folder_path.exists():
+        return {"error": f'Folder not found: {folder_id}'}, 404
+
+    try:
+        fields, files = parse_multipart_form(handler)
+    except Exception as e:
+        return {"error": f"Failed to parse form data: {e}"}, 400
+
+    try:
+        meta = json.loads(fields.get('meta', '{}'))
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid meta JSON: {e}"}, 400
+
+    new_folder_id = fields.get('newFolderId', folder_id).strip() or folder_id
+    if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
+        return {"error": "Invalid new folder ID"}, 400
+
+    if new_folder_id != folder_id:
+        new_folder_path = PLAYLIST_BASE / new_folder_id
+        if new_folder_path.exists():
+            return {"error": f'Folder "{new_folder_id}" already exists'}, 409
+        folder_path.rename(new_folder_path)
+        folder_path = new_folder_path
+        manifest_path = PLAYLIST_BASE / 'manifest.json'
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+            if folder_id in manifest:
+                manifest[manifest.index(folder_id)] = new_folder_id
+                write_json(manifest_path, manifest)
+
+    try:
+        if 'thumbnail' in files:
+            thumb_filename, thumb_bytes = files['thumbnail']
+            if thumb_filename and thumb_bytes:
+                old_thumb = meta.get('thumbnail')
+                if old_thumb and old_thumb != thumb_filename:
+                    old_path = folder_path / old_thumb
+                    if old_path.exists():
+                        old_path.unlink()
+                with open(folder_path / thumb_filename, 'wb') as f:
+                    f.write(thumb_bytes)
+                meta['thumbnail'] = thumb_filename
+
+        # Tally total runtime from video metas
+        total_dur = _tally_playlist_duration(meta.get('videos', []))
+        if total_dur is not None:
+            meta['totalDurationSecs'] = round(total_dur, 3)
+
+        write_json(folder_path / 'meta.json', meta)
+        bump_version()
+        return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
+
+    except Exception as e:
+        return {"error": f"Failed to update playlist: {e}"}, 500
+
+
+# ── API: export package (zip) ──────────────────────────────────────────────────
+
+def api_export_package(handler):
+    content_length = int(handler.headers.get('Content-Length', 0))
+    if content_length == 0:
+        return {"error": "Empty request body"}, 400
+
+    raw = handler.rfile.read(content_length)
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid JSON: {e}"}, 400
+
+    video_ids = [v for v in body.get('videos', []) if isinstance(v, str)]
+    playlist_ids = [p for p in body.get('playlists', []) if isinstance(p, str)]
+
+    if not video_ids and not playlist_ids:
+        return {"error": "No videos or playlists selected"}, 400
+
+    # Validate all ids
+    for vid in video_ids:
+        if '/' in vid or '\\' in vid or vid in ('.', '..'):
+            return {"error": f"Invalid video id: {vid}"}, 400
+    for pid in playlist_ids:
+        if '/' in pid or '\\' in pid or pid in ('.', '..'):
+            return {"error": f"Invalid playlist id: {pid}"}, 400
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for vid in video_ids:
+            folder = VIDEO_BASE / vid
+            if not folder.is_dir():
+                continue
+            for file_path in sorted(folder.rglob('*')):
+                if file_path.is_file():
+                    arc_name = f"videos/{vid}/{file_path.relative_to(folder)}"
+                    zf.write(file_path, arc_name)
+
+        for pid in playlist_ids:
+            folder = PLAYLIST_BASE / pid
+            if not folder.is_dir():
+                continue
+            for file_path in sorted(folder.rglob('*')):
+                if file_path.is_file():
+                    arc_name = f"playlists/{pid}/{file_path.relative_to(folder)}"
+                    zf.write(file_path, arc_name)
+
+    zip_bytes = buf.getvalue()
+    filename = body.get('filename', 'package').strip() or 'package'
+    # Sanitise filename
+    filename = re.sub(r'[^\w\-. ]', '_', filename).strip()
+    if not filename.endswith('.zip'):
+        filename += '.zip'
+
+    handler.send_response(200)
+    handler.send_header('Content-Type', 'application/zip')
+    handler.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+    handler.send_header('Content-Length', str(len(zip_bytes)))
+    handler.send_header('Access-Control-Allow-Origin', '*')
+    handler.send_header('Cache-Control', 'no-store')
+    handler.end_headers()
+    handler.wfile.write(zip_bytes)
+    return None, None   # already sent
+
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class ManagerHandler(SimpleHTTPRequestHandler):
@@ -598,6 +924,12 @@ class ManagerHandler(SimpleHTTPRequestHandler):
                 self._send_json(*api_create_video(self))
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
+        elif re.match(r'^/manager-api/videos/[^/]+/update$', path):
+            folder_id = unquote(path[len("/manager-api/videos/"):-len("/update")])
+            try:
+                self._send_json(*api_update_video(self, folder_id))
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
         elif path == "/manager-api/videos/reorder":
             try:
                 self._send_json(*api_reorder(self, "videos"))
@@ -606,6 +938,24 @@ class ManagerHandler(SimpleHTTPRequestHandler):
         elif path == "/manager-api/playlists/reorder":
             try:
                 self._send_json(*api_reorder(self, "playlists"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        elif path == "/manager-api/playlists/create":
+            try:
+                self._send_json(*api_create_playlist(self))
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        elif re.match(r'^/manager-api/playlists/[^/]+/update$', path):
+            pl_id = unquote(path[len("/manager-api/playlists/"):-len("/update")])
+            try:
+                self._send_json(*api_update_playlist(self, pl_id))
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        elif path == "/manager-api/export":
+            try:
+                result, status = api_export_package(self)
+                if result is not None:   # error path — normal JSON response
+                    self._send_json(result, status)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
         elif path.startswith("/manager-api/videos/") and path.endswith("/meta"):

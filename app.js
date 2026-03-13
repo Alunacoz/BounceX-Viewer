@@ -424,6 +424,17 @@ function secsToTimecode(secs) {
   return `${mm}:${ss}`
 }
 
+function secsToRuntime(secs) {
+  const s = Math.floor(secs)
+  const hh = Math.floor(s / 3600)
+  const mm = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  if (hh > 0) {
+    return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+  }
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+}
+
 function buildCard(v) {
   const folder = v._folder || v.videoId
   const thumbSrc = v.thumbnail
@@ -444,11 +455,6 @@ function buildCard(v) {
   const thumbDiv = document.createElement('div')
   thumbDiv.className = 'card-thumb'
 
-  // Duration badge — always present, updated later if auto-detecting
-  const durBadge = document.createElement('div')
-  durBadge.className = 'card-duration'
-  durBadge.textContent = timecode || '\u2014'
-
   if (thumbSrc) {
     const img = document.createElement('img')
     img.src = thumbSrc
@@ -456,13 +462,11 @@ function buildCard(v) {
     img.loading = 'lazy'
     img.addEventListener('error', () => {
       thumbDiv.innerHTML = thumbPlaceholder()
-      thumbDiv.appendChild(durBadge)
     })
     thumbDiv.appendChild(img)
   } else {
     thumbDiv.innerHTML = thumbPlaceholder()
   }
-  thumbDiv.appendChild(durBadge)
 
   card.appendChild(thumbDiv)
 
@@ -500,7 +504,6 @@ function buildCard(v) {
     probe.addEventListener('loadedmetadata', () => {
       if (probe.duration && isFinite(probe.duration)) {
         const tc = secsToTimecode(probe.duration)
-        durBadge.textContent = tc
         const metaSpan = card.querySelector('.card-duration-meta')
         if (metaSpan) metaSpan.textContent = tc
       }
@@ -589,12 +592,17 @@ function buildPlaylistCard(p) {
         ${highlights.map((t) => `<span class="card-tag">${escHtml(t)}</span>`).join('')}
       </div>
       <div class="card-title">${escHtml(p.title || p._id)}</div>
-      <div class="card-author">${escHtml(p.author || 'Unknown')}</div>
+      <div class="card-authors"><span><span class="card-author-label">Playlist by:</span>${escHtml(p.author || 'Unknown')}</span></div>
       <div class="card-meta">
         <div class="card-meta-item">
           <span>Videos</span>
           <span>${videoCount}</span>
         </div>
+        ${p.totalDurationSecs != null ? `
+        <div class="card-meta-item">
+          <span>Runtime</span>
+          <span>${secsToRuntime(p.totalDurationSecs)}</span>
+        </div>` : ''}
       </div>
     </div>
   `,
