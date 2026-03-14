@@ -817,6 +817,385 @@
         border-color: var(--teal);
       }
 
+      /* ── Create Playlist button ── */
+      .create-playlist-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        background: rgba(148, 103, 230, 0.1);
+        border: 1px solid rgba(148, 103, 230, 0.3);
+        border-radius: var(--radius);
+        color: #a87fe8;
+        cursor: pointer;
+        padding: 0.3rem 0.7rem;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .create-playlist-btn:hover {
+        background: rgba(148, 103, 230, 0.2);
+        border-color: #a87fe8;
+      }
+
+      /* ── Create Package (export) button ── */
+      .create-export-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        background: rgba(240, 180, 41, 0.08);
+        border: 1px solid rgba(240, 180, 41, 0.3);
+        border-radius: var(--radius);
+        color: var(--accent);
+        cursor: pointer;
+        padding: 0.3rem 0.7rem;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .create-export-btn:hover {
+        background: rgba(240, 180, 41, 0.18);
+        border-color: var(--accent);
+      }
+
+      /* ── Export overlay ── */
+      #createExportOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1005;
+        background: rgba(8, 9, 13, 0.92);
+        backdrop-filter: blur(8px);
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        overflow-y: auto;
+        padding: 2rem 1rem;
+      }
+      #createExportOverlay.active { display: flex; }
+
+      .create-export-panel {
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 1000px;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+        display: flex;
+        flex-direction: column;
+        animation: fadeUp 0.2s ease both;
+        margin: auto;
+      }
+
+      .create-export-header {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border); flex-shrink: 0;
+      }
+      .create-export-header-icon {
+        width: 36px; height: 36px; border-radius: var(--radius);
+        background: rgba(240, 180, 41, 0.08);
+        border: 1px solid rgba(240, 180, 41, 0.2);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--accent); flex-shrink: 0;
+      }
+      .create-export-header-text { flex: 1; }
+      .create-export-title { font-family: var(--serif); font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+      .create-export-subtitle { font-family: var(--mono); font-size: 0.65rem; color: var(--text3); letter-spacing: 0.04em; margin-top: 0.1rem; }
+      .create-export-close {
+        display: flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; background: none;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        color: var(--text3); cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .create-export-close:hover { color: var(--text); border-color: var(--border2); }
+
+      .create-export-body {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1.5rem;
+      }
+
+      /* ── Export selection columns ── */
+      .export-col { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+
+      .export-pool {
+        display: flex; flex-direction: column; gap: 3px;
+        max-height: 320px; overflow-y: auto;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 0.4rem; background: var(--bg);
+      }
+      .export-pool-item {
+        display: flex; align-items: center; gap: 0.6rem;
+        padding: 0.45rem 0.65rem; border-radius: var(--radius);
+        border: 1px solid transparent; cursor: pointer;
+        transition: background 0.1s, border-color 0.1s;
+        user-select: none;
+      }
+      .export-pool-item:hover { background: var(--surface); border-color: var(--border); }
+      .export-pool-item.selected {
+        background: rgba(240, 180, 41, 0.08);
+        border-color: rgba(240, 180, 41, 0.4);
+      }
+      .export-pool-item.selected .export-check { color: var(--accent); }
+      .export-check {
+        width: 16px; height: 16px; flex-shrink: 0; color: var(--text3);
+        transition: color 0.1s;
+      }
+      .export-item-thumb {
+        width: 36px; height: 24px; border-radius: 3px;
+        background: var(--surface2); flex-shrink: 0; overflow: hidden;
+      }
+      .export-item-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .export-item-title { font-family: var(--sans); font-size: 0.8rem; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .export-item-sub { font-family: var(--mono); font-size: 0.62rem; color: var(--text3); flex-shrink: 0; }
+      .export-sel-all {
+        font-family: var(--mono); font-size: 0.65rem; color: var(--text3);
+        background: none; border: none; cursor: pointer; padding: 0; text-align: left;
+        transition: color 0.12s;
+      }
+      .export-sel-all:hover { color: var(--accent); }
+
+      /* ── Export footer ── */
+      .create-export-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border);
+        display: flex; align-items: center; gap: 1rem;
+      }
+      .export-filename-wrap {
+        display: flex; align-items: center; gap: 0.5rem; flex: 1;
+      }
+      .export-filename-label {
+        font-family: var(--mono); font-size: 0.68rem; color: var(--text3);
+        white-space: nowrap;
+      }
+      .export-filename-input {
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: var(--radius); color: var(--text);
+        font-family: var(--mono); font-size: 0.8rem;
+        padding: 0.45rem 0.65rem; outline: none;
+        transition: border-color 0.15s; flex: 1;
+      }
+      .export-filename-input:focus { border-color: var(--accent); }
+      .export-filename-ext {
+        font-family: var(--mono); font-size: 0.75rem; color: var(--text3);
+        white-space: nowrap;
+      }
+      .create-export-error { font-family: var(--mono); font-size: 0.72rem; color: var(--red); }
+      .create-export-cancel-btn {
+        font-family: var(--mono); font-size: 0.76rem;
+        background: none; border: 1px solid var(--border); border-radius: var(--radius);
+        color: var(--text3); cursor: pointer; padding: 0.6rem 1rem;
+        transition: color 0.15s, border-color 0.15s; flex-shrink: 0;
+      }
+      .create-export-cancel-btn:hover { color: var(--text); border-color: var(--border2); }
+      .create-export-submit-btn {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.04em;
+        background: var(--accent); border: none; border-radius: var(--radius);
+        color: #0a0b0f; font-weight: 700; cursor: pointer;
+        padding: 0.6rem 1.4rem; transition: opacity 0.15s; flex-shrink: 0;
+      }
+      .create-export-submit-btn:hover { opacity: 0.85; }
+      .create-export-submit-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+      #createPlaylistOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1005;
+        background: rgba(8, 9, 13, 0.92);
+        backdrop-filter: blur(8px);
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        overflow-y: auto;
+        padding: 2rem 1rem;
+      }
+      #createPlaylistOverlay.active { display: flex; }
+
+      .create-pl-panel {
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 960px;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+        display: flex;
+        flex-direction: column;
+        animation: fadeUp 0.2s ease both;
+        margin: auto;
+      }
+
+      .create-pl-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+      .create-pl-header-icon {
+        width: 36px; height: 36px;
+        border-radius: var(--radius);
+        background: rgba(148, 103, 230, 0.1);
+        border: 1px solid rgba(148, 103, 230, 0.2);
+        display: flex; align-items: center; justify-content: center;
+        color: #a87fe8; flex-shrink: 0;
+      }
+      .create-pl-header-text { flex: 1; }
+      .create-pl-title { font-family: var(--serif); font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+      .create-pl-subtitle { font-family: var(--mono); font-size: 0.65rem; color: var(--text3); letter-spacing: 0.04em; margin-top: 0.1rem; }
+      .create-pl-close {
+        display: flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; background: none;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        color: var(--text3); cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .create-pl-close:hover { color: var(--text); border-color: var(--border2); }
+
+      .create-pl-body {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+      }
+
+      /* ── Left column: identity + thumbnail + description ── */
+      .pl-left-col { display: flex; flex-direction: column; gap: 1.5rem; }
+      /* ── Right column: video picker ── */
+      .pl-right-col { display: flex; flex-direction: column; gap: 1rem; }
+
+      /* ── Video picker pool ── */
+      .pl-video-pool {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        max-height: 260px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.4rem;
+        background: var(--bg);
+      }
+      .pl-pool-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.45rem 0.65rem;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s;
+        border: 1px solid transparent;
+        user-select: none;
+      }
+      .pl-pool-item:hover { background: var(--surface); border-color: var(--border); }
+      .pl-pool-item.added { opacity: 0.35; cursor: default; pointer-events: none; }
+      .pl-pool-thumb {
+        width: 36px; height: 24px; border-radius: 3px;
+        background: var(--surface2); flex-shrink: 0; overflow: hidden;
+      }
+      .pl-pool-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .pl-pool-title { font-family: var(--sans); font-size: 0.82rem; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pl-pool-sub { font-family: var(--mono); font-size: 0.62rem; color: var(--text3); flex-shrink: 0; }
+
+      /* ── Selected videos list ── */
+      .pl-selected-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-height: 60px;
+        max-height: 260px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.4rem;
+        background: var(--bg);
+      }
+      .pl-selected-empty {
+        font-family: var(--mono); font-size: 0.72rem;
+        color: var(--text3); opacity: 0.5; font-style: italic;
+        padding: 0.75rem; text-align: center;
+      }
+      .pl-sel-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.5rem;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        animation: fadeUp 0.15s ease both;
+      }
+      .pl-sel-item.drag-over { border-color: #a87fe8; background: rgba(148,103,230,0.08); }
+      .pl-sel-item.dragging { opacity: 0.35; }
+      .pl-sel-drag {
+        color: var(--text3); opacity: 0.4; cursor: grab; flex-shrink: 0;
+        transition: opacity 0.12s;
+      }
+      .pl-sel-item:hover .pl-sel-drag { opacity: 1; }
+      .pl-sel-drag:active { cursor: grabbing; }
+      .pl-sel-num { font-family: var(--mono); font-size: 0.62rem; color: var(--text3); min-width: 18px; text-align: right; flex-shrink: 0; }
+      .pl-sel-title { font-family: var(--sans); font-size: 0.8rem; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pl-sel-bx {
+        flex-shrink: 0;
+      }
+      .pl-sel-bx select {
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: var(--radius); color: var(--text);
+        font-family: var(--mono); font-size: 0.65rem;
+        padding: 0.2rem 1.4rem 0.2rem 0.4rem;
+        outline: none; cursor: pointer; max-width: 120px;
+        appearance: none; -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpolyline points='1,1 5,5 9,1' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 0.35rem center;
+      }
+      .pl-sel-bx select:focus { border-color: #a87fe8; }
+      .pl-sel-remove {
+        width: 22px; height: 22px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: none; border: 1px solid transparent; border-radius: var(--radius);
+        color: var(--text3); cursor: pointer;
+        transition: color 0.12s, background 0.12s, border-color 0.12s;
+      }
+      .pl-sel-remove:hover { color: var(--red); background: rgba(232,85,85,0.1); border-color: rgba(232,85,85,0.25); }
+
+      /* ── Playlist footer ── */
+      .create-pl-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border);
+        display: flex; align-items: center; gap: 1rem; justify-content: space-between;
+      }
+      .create-pl-error { font-family: var(--mono); font-size: 0.72rem; color: var(--red); flex: 1; }
+      .create-pl-progress {
+        display: none; align-items: center; gap: 0.6rem;
+        font-family: var(--mono); font-size: 0.72rem; color: var(--text2);
+      }
+      .create-pl-progress.active { display: flex; }
+      .create-pl-spinner {
+        width: 14px; height: 14px;
+        border: 2px solid var(--surface2); border-top-color: #a87fe8;
+        border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+      }
+      .create-pl-cancel-btn {
+        font-family: var(--mono); font-size: 0.76rem;
+        background: none; border: 1px solid var(--border); border-radius: var(--radius);
+        color: var(--text3); cursor: pointer; padding: 0.6rem 1rem;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .create-pl-cancel-btn:hover { color: var(--text); border-color: var(--border2); }
+      .create-pl-submit-btn {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.04em;
+        background: #a87fe8; border: none; border-radius: var(--radius);
+        color: #fff; font-weight: 700; cursor: pointer;
+        padding: 0.6rem 1.5rem;
+        transition: opacity 0.15s, transform 0.1s; flex-shrink: 0;
+      }
+      .create-pl-submit-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+      .create-pl-submit-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
       /* ── Create Package overlay ── */
       #createPkgOverlay {
         position: fixed;
@@ -845,6 +1224,14 @@
         flex-direction: column;
         animation: fadeUp 0.2s ease both;
         margin: auto;
+        flex-shrink: 0;
+      }
+
+      .create-pkg-body {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
       }
 
       .create-pkg-header {
@@ -899,13 +1286,6 @@
         flex-shrink: 0;
       }
       .create-pkg-close:hover { color: var(--text); border-color: var(--border2); }
-
-      .create-pkg-body {
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
-      }
 
       /* ── Sections ── */
       .pkg-section-title {
@@ -1567,7 +1947,47 @@
               stroke="currentColor"
               stroke-width="2.5"
             >
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+            Create video…
+          </button>
+          <button
+            class="create-playlist-btn"
+            onclick="openCreatePlaylist()"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <polyline points="3 6 4 7 6 5"/>
+              <polyline points="3 12 4 13 6 11"/>
+              <polyline points="3 18 4 19 6 17"/>
+            </svg>
+            Create playlist…
+          </button>
+          <button
+            class="create-export-btn"
+            onclick="openCreateExport()"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
             </svg>
             Create package…
           </button>
@@ -1626,8 +2046,8 @@
             </svg>
           </div>
           <div class="create-pkg-header-text">
-            <div class="create-pkg-title">Create Package</div>
-            <div class="create-pkg-subtitle">Build a new video package from scratch</div>
+            <div class="create-pkg-title" id="createPkgPanelTitle">Create Video</div>
+            <div class="create-pkg-subtitle" id="createPkgPanelSubtitle">Build a new video from scratch</div>
           </div>
           <button class="create-pkg-close" onclick="closeCreatePkg()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1639,8 +2059,8 @@
         <!-- Body -->
         <div class="create-pkg-body">
 
-          <!-- Files section -->
-          <div>
+          <!-- Files section (hidden in edit mode) -->
+          <div id="pkgFilesSection">
             <div class="pkg-section-title">Package Files</div>
             <div class="pkg-files-grid">
               <!-- Video drop zone -->
@@ -1680,19 +2100,16 @@
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- BX Files -->
-            <div style="margin-top:1rem">
-              <div class="pkg-label" style="margin-bottom:0.5rem">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                BX Files
-              </div>
-              <div class="pkg-bx-list" id="bxFileList"></div>
-              <button class="pkg-add-bx-btn" onclick="addBxEntry()">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add another .bx file…
-              </button>
-            </div>
+          <!-- BX Files (always visible; interactive in create mode, read-only in edit mode) -->
+          <div id="pkgBxSection">
+            <div class="pkg-section-title">BX Files</div>
+            <div class="pkg-bx-list" id="bxFileList"></div>
+            <button class="pkg-add-bx-btn" id="pkgAddBxBtn" onclick="addBxEntry()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add another .bx file…
+            </button>
           </div>
 
           <!-- Identity section -->
@@ -1795,10 +2212,201 @@
           <div class="create-pkg-error" id="createPkgError"></div>
           <button class="create-pkg-cancel-btn" onclick="closeCreatePkg()">Cancel</button>
           <button class="create-pkg-submit-btn" id="createPkgSubmitBtn" onclick="submitCreatePkg()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="createPkgSubmitIcon">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
             </svg>
-            Create Package!
+            <span id="createPkgSubmitLabel">Create Video!</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Create Package (export) overlay -->
+    <div id="createExportOverlay">
+      <div class="create-export-panel">
+
+        <div class="create-export-header">
+          <div class="create-export-header-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div class="create-export-header-text">
+            <div class="create-export-title">Create Package</div>
+            <div class="create-export-subtitle">Export videos and playlists as a .zip for import elsewhere</div>
+          </div>
+          <button class="create-export-close" onclick="closeCreateExport()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="create-export-body">
+
+          <!-- Videos column -->
+          <div class="export-col">
+            <div class="pkg-section-title">
+              Videos
+              <span id="exportVideoSelCount" style="font-size:0.6rem;text-transform:none;letter-spacing:0;color:var(--text3);margin-left:0.35rem"></span>
+            </div>
+            <input class="pkg-input" id="exportVideoSearch" type="text" placeholder="Search videos…" autocomplete="off" oninput="filterExportPool('video')" style="margin-bottom:0.25rem">
+            <div class="export-pool" id="exportVideoPool">
+              <div class="pl-selected-empty">Loading…</div>
+            </div>
+            <button class="export-sel-all" onclick="exportSelectAll('video')">Select all / None</button>
+          </div>
+
+          <!-- Playlists column -->
+          <div class="export-col">
+            <div class="pkg-section-title">
+              Playlists
+              <span id="exportPlaylistSelCount" style="font-size:0.6rem;text-transform:none;letter-spacing:0;color:var(--text3);margin-left:0.35rem"></span>
+            </div>
+            <input class="pkg-input" id="exportPlaylistSearch" type="text" placeholder="Search playlists…" autocomplete="off" oninput="filterExportPool('playlist')" style="margin-bottom:0.25rem">
+            <div class="export-pool" id="exportPlaylistPool">
+              <div class="pl-selected-empty">Loading…</div>
+            </div>
+            <button class="export-sel-all" onclick="exportSelectAll('playlist')">Select all / None</button>
+          </div>
+
+        </div>
+
+        <div class="create-export-footer">
+          <div class="export-filename-wrap">
+            <span class="export-filename-label">Filename:</span>
+            <input class="export-filename-input" id="exportFilename" type="text" value="package" autocomplete="off" spellcheck="false">
+            <span class="export-filename-ext">.zip</span>
+          </div>
+          <span class="create-export-error" id="createExportError"></span>
+          <button class="create-export-cancel-btn" onclick="closeCreateExport()">Cancel</button>
+          <button class="create-export-submit-btn" id="createExportSubmitBtn" onclick="submitCreateExport()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download .zip
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Create / Edit Playlist overlay -->
+    <div id="createPlaylistOverlay">
+      <div class="create-pl-panel">
+
+        <div class="create-pl-header">
+          <div class="create-pl-header-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/>
+            </svg>
+          </div>
+          <div class="create-pl-header-text">
+            <div class="create-pl-title" id="plPanelTitle">Create Playlist</div>
+            <div class="create-pl-subtitle" id="plPanelSubtitle">Build a new playlist from your videos</div>
+          </div>
+          <button class="create-pl-close" onclick="closeCreatePlaylist()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="create-pl-body">
+
+          <!-- Left column: identity + thumbnail + description -->
+          <div class="pl-left-col">
+
+            <div>
+              <div class="pkg-section-title">Playlist Identity</div>
+              <div style="display:flex;flex-direction:column;gap:1rem">
+                <div class="pkg-field">
+                  <label class="pkg-label">Playlist Title</label>
+                  <input class="pkg-input" id="plTitle" type="text" placeholder="My Playlist" autocomplete="off" oninput="onPlTitleInput()">
+                </div>
+                <div class="pkg-field">
+                  <label class="pkg-label">Author <span class="optional-badge">optional</span></label>
+                  <input class="pkg-input" id="plAuthor" type="text" placeholder="Author name" autocomplete="off">
+                </div>
+                <div class="pkg-field">
+                  <label class="pkg-label">Folder ID <span class="optional-badge" id="plFolderIdBadge">auto-generated · editable</span></label>
+                  <input class="pkg-input" id="plFolderId" type="text" placeholder="my-playlist" autocomplete="off" oninput="onPlFolderIdInput()">
+                  <div class="pkg-folder-preview" id="plFolderPreview">playlists/<span id="plFolderPreviewId">…</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="pkg-section-title">Thumbnail <span style="font-size:0.6rem;text-transform:none;letter-spacing:0;opacity:0.6">optional</span></div>
+              <div class="pkg-drop-zone" id="plThumbDropZone" onclick="document.getElementById('plThumbFileInput').click()">
+                <input type="file" id="plThumbFileInput" accept=".jpg,.jpeg,.png,.webp,.gif" style="display:none">
+                <div class="pkg-drop-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div class="pkg-drop-label" id="plThumbDropLabel">Drop thumbnail here</div>
+                <div class="pkg-drop-hint" id="plThumbDropHint">jpg, png, webp · click to browse</div>
+                <div class="pkg-drop-filename" id="plThumbDropFilename" style="display:none"></div>
+                <button class="pkg-drop-clear" id="plThumbDropClear" onclick="clearPlThumbFile(event)" title="Remove">✕</button>
+              </div>
+            </div>
+
+            <div class="pkg-field">
+              <div class="pkg-section-title">Description <span style="font-size:0.6rem;text-transform:none;letter-spacing:0;opacity:0.6">optional · supports markdown links</span></div>
+              <textarea class="pkg-textarea" id="plDescription" placeholder="Write a description…&#10;Use [text](url) for links." oninput="autoResizeTextarea(this)" style="min-height:80px"></textarea>
+            </div>
+
+            <div class="pkg-field">
+              <div class="pkg-section-title">Tags <span style="font-size:0.6rem;text-transform:none;letter-spacing:0;opacity:0.6">optional · press Enter to add</span></div>
+              <div class="pkg-tag-box" id="plTagBox" onclick="document.getElementById('plTagInput').focus()">
+                <input class="pkg-tag-input-inner" id="plTagInput" type="text" placeholder="Add a tag…" autocomplete="off">
+              </div>
+              <div class="pkg-tag-hint">Type a tag and press Enter or comma to add it. Click × to remove.</div>
+            </div>
+
+          </div>
+
+          <!-- Right column: video selection -->
+          <div class="pl-right-col">
+
+            <div>
+              <div class="pkg-section-title">Available Videos <span style="font-size:0.6rem;text-transform:none;letter-spacing:0;opacity:0.6" id="plPoolHint">click to add</span></div>
+              <input class="pkg-input" id="plVideoSearch" type="text" placeholder="Search videos…" autocomplete="off" oninput="filterPlPool()" style="margin-bottom:0.5rem">
+              <div class="pl-video-pool" id="plVideoPool">
+                <div class="pl-selected-empty">Loading videos…</div>
+              </div>
+            </div>
+
+            <div>
+              <div class="pkg-section-title" style="margin-top:0.5rem">
+                Selected Videos
+                <span id="plSelCount" style="font-size:0.6rem;text-transform:none;letter-spacing:0;color:var(--text3);margin-left:0.35rem"></span>
+              </div>
+              <div class="pl-selected-list" id="plSelectedList">
+                <div class="pl-selected-empty" id="plSelectedEmpty">No videos added yet — click a video above</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="create-pl-footer">
+          <div class="create-pl-progress" id="createPlProgress">
+            <div class="create-pl-spinner"></div>
+            <span id="createPlProgressText">Creating…</span>
+          </div>
+          <div class="create-pl-error" id="createPlError"></div>
+          <button class="create-pl-cancel-btn" onclick="closeCreatePlaylist()">Cancel</button>
+          <button class="create-pl-submit-btn" id="createPlSubmitBtn" onclick="submitCreatePlaylist()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            </svg>
+            <span id="createPlSubmitLabel">Create Playlist!</span>
           </button>
         </div>
 
@@ -2022,6 +2630,8 @@
         if (e.key === 'Escape') {
           closeConfirm()
           closeMeta()
+          closeCreatePlaylist()
+          closeCreateExport()
         }
       })
 
@@ -2385,7 +2995,7 @@
           confirmDelete('video', v._folder, v.title || v._folder)
         })
         el.addEventListener('click', () =>
-          openMeta('video', v._folder, v.title || v._folder),
+          openEditVideo(v._folder, v.title || v._folder),
         )
         return el
       }
@@ -2444,7 +3054,7 @@
           confirmDelete('playlist', p._id, p.title || p._id)
         })
         el.addEventListener('click', () =>
-          openMeta('playlist', p._id, p.title || p._id),
+          openEditPlaylist(p._id, p.title || p._id),
         )
         return el
       }
@@ -2491,27 +3101,155 @@
 
       loadAll()
 
-      // ── Create Package ────────────────────────────────────────────────────
+      // ── Create / Edit Video ───────────────────────────────────────────────
       let _pkgVideoFile = null
       let _pkgThumbFile = null
-      let _bxEntries = []   // [{file, label}]
+      let _bxEntries = []   // [{file: File|null, existingFile: string|null, label: string}]
       let _pkgTags = []
       let _pkgHighlightedTags = new Set()
       let _folderIdManuallyEdited = false
       let _bxEntryCount = 0
       let _pkgDurationSecs = null
+      let _pkgEditMode = false
+      let _pkgEditId = null
+      let _pkgExistingVideoFile = null   // filename string when editing
+      let _pkgExistingThumbFile = null   // filename string when editing
 
       function openCreatePkg() {
-        resetCreatePkg()
+        resetCreatePkg(false)
+        document.getElementById('createPkgPanelTitle').textContent = 'Create Video'
+        document.getElementById('createPkgPanelSubtitle').textContent = 'Build a new video from scratch'
+        document.getElementById('createPkgSubmitLabel').textContent = 'Create Video!'
+        document.getElementById('pkgFolderId').readOnly = false
+        document.getElementById('pkgFolderId').style.opacity = ''
+        document.getElementById('pkgFolderPreview').style.display = ''
+        document.getElementById('pkgFilesSection').style.display = ''
+        document.getElementById('pkgAddBxBtn').style.display = ''
         document.getElementById('createPkgOverlay').classList.add('active')
         document.getElementById('pkgTitle').focus()
       }
 
-      function closeCreatePkg() {
-        document.getElementById('createPkgOverlay').classList.remove('active')
+      async function openEditVideo(id, displayName) {
+        resetCreatePkg(true)
+        _pkgEditMode = true
+        _pkgEditId = id
+
+        document.getElementById('createPkgPanelTitle').textContent = 'Edit Video'
+        document.getElementById('createPkgPanelSubtitle').textContent = `videos/${id}/meta.json`
+        document.getElementById('createPkgSubmitLabel').textContent = 'Save Changes'
+        document.getElementById('pkgFolderId').readOnly = false
+        document.getElementById('pkgFolderId').style.opacity = ''
+        document.getElementById('pkgFolderPreview').style.display = ''
+        document.getElementById('pkgFilesSection').style.display = ''
+        document.getElementById('pkgAddBxBtn').style.display = ''
+
+        document.getElementById('pkgFolderId').value = id
+        document.getElementById('pkgFolderPreviewId').textContent = id
+        document.getElementById('createPkgOverlay').classList.add('active')
+        document.getElementById('createPkgError').textContent = 'Loading…'
+        document.getElementById('createPkgSubmitBtn').disabled = true
+
+        try {
+          const res = await fetch(
+            `${API}/manager-api/videos/${encodeURIComponent(id)}/meta`,
+            { cache: 'no-store' }
+          )
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const meta = await res.json()
+
+          // Identity fields
+          document.getElementById('pkgTitle').value = meta.title || ''
+          document.getElementById('pkgFolderId').value = id
+          document.getElementById('pkgFolderPreviewId').textContent = id
+          document.getElementById('pkgVideoCreator').value = meta.videoCreator || ''
+          document.getElementById('pkgPathCreator').value = meta.pathCreator || ''
+          document.getElementById('pkgBpm').value = meta.bpm != null ? meta.bpm : ''
+          document.getElementById('pkgOffset').value = meta.offset != null ? meta.offset : ''
+
+          // Description (array or string)
+          const rawDesc = meta.description
+          document.getElementById('pkgDescription').value = Array.isArray(rawDesc)
+            ? rawDesc.join('\n') : (rawDesc || '')
+          autoResizeTextarea(document.getElementById('pkgDescription'))
+
+          // Pre-fill video drop zone — show existing filename, allow replacement
+          if (meta.videoFile) {
+            _pkgExistingVideoFile = meta.videoFile
+            setDropZoneFilled('videoDropZone', 'videoDropLabel', 'videoDropHint', 'videoDropFilename', meta.videoFile)
+            const hint = document.getElementById('videoDropHint')
+            hint.textContent = 'Drop a new file to replace · click to browse'
+            hint.style.display = ''
+          }
+
+          // Pre-fill thumbnail drop zone
+          if (meta.thumbnail) {
+            _pkgExistingThumbFile = meta.thumbnail
+            setDropZoneFilled('thumbDropZone', 'thumbDropLabel', 'thumbDropHint', 'thumbDropFilename', meta.thumbnail)
+            const hint = document.getElementById('thumbDropHint')
+            hint.textContent = 'Drop a new file to replace · click to browse'
+            hint.style.display = ''
+          }
+
+          // Category dropdowns from tags
+          const allTags = meta.tags || []
+          const videoTypeOpts = ['bouncex', 'dildo hero', 'other']
+          const difficultyOpts = ['easy', 'medium', 'hard', 'extreme', 'multi-difficulty']
+          const songQuantityOpts = ['single song', 'compilation', 'no song']
+          let remainingTags = [...allTags]
+          function trySetSelect(selectId, opts) {
+            const sel = document.getElementById(selectId)
+            for (const opt of opts) {
+              const idx = remainingTags.findIndex(t => t.toLowerCase() === opt)
+              if (idx !== -1) {
+                for (const o of sel.options) {
+                  if (o.value.toLowerCase() === opt) { sel.value = o.value; break }
+                }
+                remainingTags.splice(idx, 1)
+                return
+              }
+            }
+          }
+          trySetSelect('pkgVideoType', videoTypeOpts)
+          trySetSelect('pkgDifficulty', difficultyOpts)
+          trySetSelect('pkgSongQuantity', songQuantityOpts)
+          ;(meta.highlightedTags || []).forEach(t => {
+            if (!remainingTags.includes(t)) remainingTags.push(t)
+          })
+          _pkgTags = remainingTags
+          renderTags()
+          if (meta.highlightedTags) {
+            meta.highlightedTags.forEach(t => {
+              if (_pkgTags.includes(t)) _pkgHighlightedTags.add(t)
+            })
+          }
+          renderHighlightPool()
+
+          // Pre-fill BX entries — fully interactive, existing files shown as pre-selected
+          const bxFiles = meta.bxFiles || (meta.bxFile ? [{ label: 'Default', file: meta.bxFile }] : [])
+          document.getElementById('bxFileList').innerHTML = ''
+          _bxEntries = []
+          _bxEntryCount = 0
+          if (bxFiles.length > 0) {
+            bxFiles.forEach(bx => addBxEntry(bx.file, bx.label || 'Default'))
+          } else {
+            addBxEntry()
+          }
+
+          document.getElementById('createPkgError').textContent = ''
+          document.getElementById('createPkgSubmitBtn').disabled = false
+          document.getElementById('pkgTitle').focus()
+        } catch (e) {
+          document.getElementById('createPkgError').textContent = `Failed to load: ${e.message}`
+        }
       }
 
-      function resetCreatePkg() {
+      function closeCreatePkg() {
+        document.getElementById('createPkgOverlay').classList.remove('active')
+        _pkgEditMode = false
+        _pkgEditId = null
+      }
+
+      function resetCreatePkg(isEdit = false) {
         _pkgVideoFile = null
         _pkgThumbFile = null
         _bxEntries = []
@@ -2520,6 +3258,10 @@
         _folderIdManuallyEdited = false
         _bxEntryCount = 0
         _pkgDurationSecs = null
+        _pkgEditMode = false
+        _pkgEditId = null
+        _pkgExistingVideoFile = null
+        _pkgExistingThumbFile = null
 
         document.getElementById('pkgTitle').value = ''
         document.getElementById('pkgFolderId').value = ''
@@ -2543,7 +3285,7 @@
 
         // Reset bx entries
         document.getElementById('bxFileList').innerHTML = ''
-        addBxEntry()
+        if (!isEdit) addBxEntry()
 
         document.getElementById('createPkgError').textContent = ''
         document.getElementById('createPkgProgress').classList.remove('active')
@@ -2654,23 +3396,30 @@
       }
 
       // ── BX entries ────────────────────────────────────────────────────────
-      function addBxEntry() {
+      // existingFile: string filename already on disk (null for new entries)
+      // preLabel: pre-filled label string
+      function addBxEntry(existingFile = null, preLabel = null) {
         const idx = _bxEntryCount++
-        _bxEntries.push({ file: null, label: idx === 0 ? 'Default' : '' })
+        const defaultLabel = preLabel != null ? preLabel : (existingFile ? '' : (idx === 0 ? 'Default' : ''))
+        _bxEntries.push({ file: null, existingFile: existingFile || null, label: defaultLabel })
+
+        const hasExisting = !!existingFile
+        const dropClass = hasExisting ? 'pkg-bx-drop has-file' : 'pkg-bx-drop'
+        const dropLabel = hasExisting ? existingFile : 'Drop .bx file or click to browse'
 
         const entry = document.createElement('div')
         entry.className = 'pkg-bx-entry'
         entry.dataset.idx = idx
         entry.innerHTML = `
-          <div class="pkg-bx-drop" id="bxDrop_${idx}">
+          <div class="${dropClass}" id="bxDrop_${idx}">
             <input type="file" accept=".bx" id="bxInput_${idx}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--text3)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:${hasExisting ? 'var(--teal)' : 'var(--text3)'}">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span class="pkg-bx-drop-label" id="bxLabel_${idx}">Drop .bx file or click to browse</span>
+            <span class="pkg-bx-drop-label" id="bxLabel_${idx}">${esc(dropLabel)}</span>
           </div>
-          <input class="pkg-input" type="text" id="bxTag_${idx}" placeholder="Label (e.g. Default)" value="">
+          <input class="pkg-input" type="text" id="bxTag_${idx}" placeholder="Label (e.g. Default)" value="${esc(defaultLabel)}">
           <button class="pkg-remove-bx-btn" onclick="removeBxEntry(${idx})" title="Remove">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -2699,9 +3448,12 @@
       }
 
       function setBxFile(idx, f) {
-        _bxEntries[idx] = { ..._bxEntries[idx], file: f }
+        _bxEntries[idx] = { ..._bxEntries[idx], file: f, existingFile: null }
         const drop = document.getElementById(`bxDrop_${idx}`)
         drop.classList.add('has-file')
+        // Update the icon color to teal now that a file is selected
+        const svg = drop.querySelector('svg')
+        if (svg) svg.style.color = 'var(--teal)'
         document.getElementById(`bxLabel_${idx}`).textContent = f.name
       }
 
@@ -2725,6 +3477,7 @@
       }
 
       function onTitleInput() {
+        if (_pkgEditMode) return
         if (!_folderIdManuallyEdited) {
           const id = titleToFolderId(document.getElementById('pkgTitle').value)
           document.getElementById('pkgFolderId').value = id
@@ -2821,7 +3574,77 @@
         const errorEl = document.getElementById('createPkgError')
         errorEl.textContent = ''
 
-        // Validate
+        // ── Edit mode: full multipart update ───────────────────────────────
+        if (_pkgEditMode) {
+          const title = document.getElementById('pkgTitle').value.trim()
+          const newFolderId = document.getElementById('pkgFolderId').value.trim()
+
+          let hasError = false
+          if (!title) { document.getElementById('pkgTitle').classList.add('error'); hasError = true }
+          else document.getElementById('pkgTitle').classList.remove('error')
+          if (!newFolderId) { document.getElementById('pkgFolderId').classList.add('error'); hasError = true }
+          else document.getElementById('pkgFolderId').classList.remove('error')
+
+          // Must still have at least one bx entry (new file or existing)
+          const validBx = _bxEntries.filter(e => e && (e.file || e.existingFile))
+          if (validBx.length === 0) {
+            errorEl.textContent = 'At least one .bx file is required.'
+            hasError = true
+          }
+          if (hasError) {
+            if (!errorEl.textContent) errorEl.textContent = 'Please fill in all required fields.'
+            return
+          }
+
+          const meta = buildMetaObject(title)
+          // Keep existing videoFile / thumbnail in meta so server knows current names
+          if (_pkgExistingVideoFile && !_pkgVideoFile) meta.videoFile = _pkgExistingVideoFile
+          if (_pkgExistingThumbFile && !_pkgThumbFile) meta.thumbnail = _pkgExistingThumbFile
+
+          const fd = new FormData()
+          fd.append('newFolderId', newFolderId)
+          fd.append('meta', JSON.stringify(meta))
+          if (_pkgVideoFile) fd.append('video', _pkgVideoFile, _pkgVideoFile.name)
+          if (_pkgThumbFile) fd.append('thumbnail', _pkgThumbFile, _pkgThumbFile.name)
+
+          // BX entries: send count + either bxFile_N (new) or bxExistingFile_N (keep)
+          const activeBx = _bxEntries.filter(e => e && (e.file || e.existingFile))
+          fd.append('bxCount', String(activeBx.length))
+          activeBx.forEach((entry, i) => {
+            const label = document.getElementById(`bxTag_${_bxEntries.indexOf(entry)}`)?.value.trim() || 'Default'
+            fd.append(`bxLabel_${i}`, label)
+            if (entry.file) {
+              fd.append(`bxFile_${i}`, entry.file, entry.file.name)
+            } else {
+              fd.append(`bxExistingFile_${i}`, entry.existingFile)
+            }
+          })
+
+          document.getElementById('createPkgSubmitBtn').disabled = true
+          document.getElementById('createPkgProgress').classList.add('active')
+          document.getElementById('createPkgProgressText').textContent = 'Saving…'
+
+          try {
+            const res = await fetch(
+              `${API}/manager-api/videos/${encodeURIComponent(_pkgEditId)}/update`,
+              { method: 'POST', body: fd, cache: 'no-store' }
+            )
+            const result = await res.json()
+            if (result.error) throw new Error(result.error)
+
+            closeCreatePkg()
+            const renamed = result.renamed ? ` (renamed to "${newFolderId}")` : ''
+            showToast('success', 'Video updated', `"${_pkgEditId}" saved${renamed}.`)
+            await loadVideos()
+          } catch (e) {
+            document.getElementById('createPkgProgress').classList.remove('active')
+            document.getElementById('createPkgSubmitBtn').disabled = false
+            errorEl.textContent = `Error: ${e.message}`
+          }
+          return
+        }
+
+        // ── Create mode: full validation + file upload ─────────────────────
         const title = document.getElementById('pkgTitle').value.trim()
         const folderId = document.getElementById('pkgFolderId').value.trim()
 
@@ -2855,32 +3678,8 @@
           return
         }
 
-        // Build meta
-        const meta = { title }
-        const videoCreator = document.getElementById('pkgVideoCreator').value.trim()
-        const pathCreator = document.getElementById('pkgPathCreator').value.trim()
-        const bpm = document.getElementById('pkgBpm').value.trim()
-        const offset = document.getElementById('pkgOffset').value.trim()
-        const description = document.getElementById('pkgDescription').value.trim()
-
-        if (videoCreator) meta.videoCreator = videoCreator
-        if (pathCreator) meta.pathCreator = pathCreator
-        if (bpm !== '') meta.bpm = parseFloat(bpm)
-        if (offset !== '') meta.offset = parseFloat(offset)
+        const meta = buildMetaObject(title)
         if (_pkgDurationSecs !== null) meta.durationSecs = _pkgDurationSecs
-        if (description) meta.description = description
-        if (_pkgTags.length > 0) meta.tags = [..._pkgTags]
-        // Merge reserved category tags from dropdowns — prepend so they appear first
-        const categoryTags = [
-          document.getElementById('pkgVideoType').value,
-          document.getElementById('pkgDifficulty').value,
-          document.getElementById('pkgSongQuantity').value,
-        ].filter(Boolean).map(t => t.toLowerCase())
-        if (categoryTags.length > 0) {
-          const existing = meta.tags || []
-          meta.tags = [...categoryTags, ...existing.filter(t => !categoryTags.includes(t))]
-        }
-        if (_pkgHighlightedTags.size > 0) meta.highlightedTags = [..._pkgHighlightedTags]
 
         // Build FormData
         const fd = new FormData()
@@ -2913,7 +3712,7 @@
           if (result.error) throw new Error(result.error)
 
           closeCreatePkg()
-          showToast('success', 'Package created!', `"${folderId}" has been added to your library.`)
+          showToast('success', 'Video created!', `"${folderId}" has been added to your library.`)
           await loadVideos([result.created])
 
         } catch (e) {
@@ -2921,6 +3720,38 @@
           document.getElementById('createPkgSubmitBtn').disabled = false
           errorEl.textContent = `Error: ${e.message}`
         }
+      }
+
+      // ── Shared meta builder ───────────────────────────────────────────────
+      function buildMetaObject(title) {
+        const meta = { title }
+        const videoCreator = document.getElementById('pkgVideoCreator').value.trim()
+        const pathCreator = document.getElementById('pkgPathCreator').value.trim()
+        const bpm = document.getElementById('pkgBpm').value.trim()
+        const offset = document.getElementById('pkgOffset').value.trim()
+        const description = document.getElementById('pkgDescription').value.trim()
+
+        if (videoCreator) meta.videoCreator = videoCreator
+        if (pathCreator) meta.pathCreator = pathCreator
+        if (bpm !== '') meta.bpm = parseFloat(bpm)
+        if (offset !== '') meta.offset = parseFloat(offset)
+        if (description) {
+          const lines = description.split('\n').map(l => l.trimEnd()).filter((l, i, arr) => l || (i < arr.length - 1))
+          meta.description = lines.length > 1 ? lines : description
+        }
+        if (_pkgTags.length > 0) meta.tags = [..._pkgTags]
+        // Merge reserved category tags from dropdowns — prepend so they appear first
+        const categoryTags = [
+          document.getElementById('pkgVideoType').value,
+          document.getElementById('pkgDifficulty').value,
+          document.getElementById('pkgSongQuantity').value,
+        ].filter(Boolean).map(t => t.toLowerCase())
+        if (categoryTags.length > 0) {
+          const existing = meta.tags || []
+          meta.tags = [...categoryTags, ...existing.filter(t => !categoryTags.includes(t))]
+        }
+        if (_pkgHighlightedTags.size > 0) meta.highlightedTags = [..._pkgHighlightedTags]
+        return meta
       }
 
       // ── Close on backdrop click ───────────────────────────────────────────
@@ -2943,6 +3774,637 @@
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) loadAll()
       })
+
+      // ── Prevent global drop overlay from firing inside playlist panel ────
+      document.getElementById('createPlaylistOverlay').addEventListener('dragover', (e) => e.stopPropagation())
+      document.getElementById('createPlaylistOverlay').addEventListener('dragenter', (e) => e.stopPropagation())
+      document.getElementById('createPlaylistOverlay').addEventListener('drop', (e) => e.stopPropagation())
+      document.getElementById('createPlaylistOverlay').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('createPlaylistOverlay')) closeCreatePlaylist()
+      })
+
+      // ── Create / Edit Playlist ─────────────────────────────────────────────
+
+      let _plEditMode = false
+      let _plEditId = null
+      let _plThumbFile = null
+      let _plExistingThumb = null
+      let _plSelectedVideos = []   // [{id, title, bxFiles, selectedBx}]
+      let _plAllVideos = []        // full video list cache
+      let _plFolderIdManual = false
+      let _plSelDragSrc = null
+      let _plTags = []
+
+      function openCreatePlaylist() {
+        _resetPlaylist(false)
+        document.getElementById('plPanelTitle').textContent = 'Create Playlist'
+        document.getElementById('plPanelSubtitle').textContent = 'Build a new playlist from your videos'
+        document.getElementById('createPlSubmitLabel').textContent = 'Create Playlist!'
+        document.getElementById('plFolderId').readOnly = false
+        document.getElementById('plFolderId').style.opacity = ''
+        document.getElementById('plFolderPreview').style.display = ''
+        document.getElementById('plFolderIdBadge').textContent = 'auto-generated · editable'
+        document.getElementById('createPlaylistOverlay').classList.add('active')
+        _loadPlVideoPool()
+        document.getElementById('plTitle').focus()
+      }
+
+      async function openEditPlaylist(id, displayName) {
+        _resetPlaylist(true)
+        _plEditMode = true
+        _plEditId = id
+
+        document.getElementById('plPanelTitle').textContent = 'Edit Playlist'
+        document.getElementById('plPanelSubtitle').textContent = `playlists/${id}/meta.json`
+        document.getElementById('createPlSubmitLabel').textContent = 'Save Changes'
+        document.getElementById('plFolderId').readOnly = false
+        document.getElementById('plFolderId').style.opacity = ''
+        document.getElementById('plFolderPreview').style.display = ''
+        document.getElementById('plFolderIdBadge').textContent = 'editable · renaming moves folder'
+        document.getElementById('plFolderId').value = id
+        document.getElementById('plFolderPreviewId').textContent = id
+        document.getElementById('createPlaylistOverlay').classList.add('active')
+        document.getElementById('createPlError').textContent = 'Loading…'
+        document.getElementById('createPlSubmitBtn').disabled = true
+
+        await _loadPlVideoPool()
+
+        try {
+          const res = await fetch(`${API}/manager-api/playlists/${encodeURIComponent(id)}/meta`, { cache: 'no-store' })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const meta = await res.json()
+
+          document.getElementById('plTitle').value = meta.title || ''
+          const rawDesc = meta.description
+          document.getElementById('plDescription').value = Array.isArray(rawDesc) ? rawDesc.join('\n') : (rawDesc || '')
+          autoResizeTextarea(document.getElementById('plDescription'))
+
+          document.getElementById('plAuthor').value = meta.author || ''
+
+          // Populate tags
+          _plTags = Array.isArray(meta.tags) ? [...meta.tags] : []
+          _renderPlTags()
+
+          if (meta.thumbnail) {
+            _plExistingThumb = meta.thumbnail
+            setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', meta.thumbnail)
+            document.getElementById('plThumbDropHint').textContent = 'Drop a new file to replace · click to browse'
+            document.getElementById('plThumbDropHint').style.display = ''
+          }
+
+          const entries = meta.videos || []
+          for (const entry of entries) {
+            const folderId = typeof entry === 'string' ? entry : (entry.id || entry.videoId || '')
+            const bxOverride = typeof entry === 'string' ? null : (entry.bxFile || null)
+            const videoMeta = _plAllVideos.find(v => v._folder === folderId)
+            if (videoMeta) {
+              const bxFiles = videoMeta.bxFiles || (videoMeta.bxFile ? [{ label: 'Default', file: videoMeta.bxFile }] : [])
+              const selectedBx = bxOverride || (bxFiles[0] ? bxFiles[0].file : null)
+              _plAddToSelected(videoMeta, selectedBx)
+            }
+          }
+
+          document.getElementById('createPlError').textContent = ''
+          document.getElementById('createPlSubmitBtn').disabled = false
+          document.getElementById('plTitle').focus()
+        } catch (e) {
+          document.getElementById('createPlError').textContent = `Failed to load: ${e.message}`
+        }
+      }
+
+      function closeCreatePlaylist() {
+        document.getElementById('createPlaylistOverlay').classList.remove('active')
+        _plEditMode = false
+        _plEditId = null
+      }
+
+      function _resetPlaylist(isEdit) {
+        _plEditMode = false
+        _plEditId = null
+        _plThumbFile = null
+        _plExistingThumb = null
+        _plSelectedVideos = []
+        _plFolderIdManual = false
+        _plTags = []
+
+        document.getElementById('plTitle').value = ''
+        document.getElementById('plAuthor').value = ''
+        document.getElementById('plFolderId').value = ''
+        document.getElementById('plFolderPreviewId').textContent = '…'
+        document.getElementById('plDescription').value = ''
+        document.getElementById('plDescription').style.height = ''
+        document.getElementById('plVideoSearch').value = ''
+        document.getElementById('plTagInput').value = ''
+        document.getElementById('plTagBox').querySelectorAll('.pkg-tag-chip').forEach(c => c.remove())
+        document.getElementById('createPlError').textContent = ''
+        document.getElementById('createPlProgress').classList.remove('active')
+        document.getElementById('createPlSubmitBtn').disabled = false
+        document.getElementById('plTitle').classList.remove('error')
+        document.getElementById('plFolderId').classList.remove('error')
+        setDropZoneEmpty('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', 'Drop thumbnail here', 'jpg, png, webp · click to browse')
+        _renderPlSelected()
+      }
+
+      // ── Thumbnail file ─────────────────────────────────────────────────────
+
+      document.getElementById('plThumbFileInput').addEventListener('change', (e) => {
+        const f = e.target.files[0]
+        if (f) _setPlThumb(f)
+        e.target.value = ''
+      })
+
+      function _setPlThumb(f) {
+        _plThumbFile = f
+        setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', f.name)
+      }
+
+      function clearPlThumbFile(e) {
+        e.stopPropagation()
+        _plThumbFile = null
+        _plExistingThumb = null
+        setDropZoneEmpty('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', 'Drop thumbnail here', 'jpg, png, webp · click to browse')
+      }
+
+      setupFileDrop('plThumbDropZone', (f) => _setPlThumb(f))
+
+      // ── Video pool ─────────────────────────────────────────────────────────
+
+      async function _loadPlVideoPool() {
+        const poolEl = document.getElementById('plVideoPool')
+        poolEl.innerHTML = '<div class="pl-selected-empty">Loading…</div>'
+        try {
+          const res = await fetch(`${API}/manager-api/videos?_t=${Date.now()}`, { cache: 'no-store' })
+          const data = await res.json()
+          _plAllVideos = Array.isArray(data) ? data : []
+          _renderPlPool()
+        } catch {
+          poolEl.innerHTML = `<div class="pl-selected-empty" style="color:var(--red)">Failed to load videos</div>`
+        }
+      }
+
+      function _renderPlPool() {
+        const search = document.getElementById('plVideoSearch').value.toLowerCase()
+        const poolEl = document.getElementById('plVideoPool')
+        const selectedIds = new Set(_plSelectedVideos.map(v => v.id))
+        const filtered = _plAllVideos.filter(v =>
+          !search || (v.title || v._folder).toLowerCase().includes(search)
+        )
+        if (filtered.length === 0) {
+          poolEl.innerHTML = '<div class="pl-selected-empty">No videos found</div>'
+          return
+        }
+        poolEl.innerHTML = ''
+        filtered.forEach(v => {
+          const isAdded = selectedIds.has(v._folder)
+          const div = document.createElement('div')
+          div.className = 'pl-pool-item' + (isAdded ? ' added' : '')
+          div.dataset.id = v._folder
+          const thumbUrl = v.thumbnail ? `videos/${encodeURIComponent(v._folder)}/${encodeURIComponent(v.thumbnail)}` : null
+          div.innerHTML = `
+            <div class="pl-pool-thumb">${thumbUrl ? `<img src="${thumbUrl}" onerror="this.style.display='none'">` : ''}</div>
+            <span class="pl-pool-title">${esc(v.title || v._folder)}</span>
+            <span class="pl-pool-sub">${esc(v.pathCreator || '')}</span>
+          `
+          if (!isAdded) {
+            div.addEventListener('click', () => {
+              const bxFiles = v.bxFiles || (v.bxFile ? [{ label: 'Default', file: v.bxFile }] : [])
+              _plAddToSelected(v, bxFiles[0] ? bxFiles[0].file : null)
+            })
+          }
+          poolEl.appendChild(div)
+        })
+      }
+
+      function filterPlPool() { _renderPlPool() }
+
+      // ── Selected list ──────────────────────────────────────────────────────
+
+      function _plAddToSelected(videoMeta, selectedBxFile) {
+        const bxFiles = videoMeta.bxFiles || (videoMeta.bxFile ? [{ label: 'Default', file: videoMeta.bxFile }] : [])
+        _plSelectedVideos.push({
+          id: videoMeta._folder,
+          title: videoMeta.title || videoMeta._folder,
+          bxFiles,
+          selectedBx: selectedBxFile || (bxFiles[0] ? bxFiles[0].file : null)
+        })
+        _renderPlSelected()
+        _renderPlPool()
+      }
+
+      function _plRemoveSelected(idx) {
+        _plSelectedVideos.splice(idx, 1)
+        _renderPlSelected()
+        _renderPlPool()
+      }
+
+      function _renderPlSelected() {
+        const list = document.getElementById('plSelectedList')
+        const countEl = document.getElementById('plSelCount')
+        countEl.textContent = _plSelectedVideos.length ? `(${_plSelectedVideos.length})` : ''
+
+        list.innerHTML = ''
+        if (_plSelectedVideos.length === 0) {
+          const empty = document.createElement('div')
+          empty.className = 'pl-selected-empty'
+          empty.id = 'plSelectedEmpty'
+          empty.textContent = 'No videos added yet — click a video above'
+          list.appendChild(empty)
+          return
+        }
+
+        _plSelectedVideos.forEach((v, i) => {
+          const row = document.createElement('div')
+          row.className = 'pl-sel-item'
+          row.dataset.idx = i
+          row.setAttribute('draggable', 'false')
+
+          const bxSelect = v.bxFiles.length > 1
+            ? `<div class="pl-sel-bx"><select data-idx="${i}" onchange="_plChangeBx(${i}, this.value)">
+                ${v.bxFiles.map(b => `<option value="${esc(b.file)}"${b.file === v.selectedBx ? ' selected' : ''}>${esc(b.label)}</option>`).join('')}
+               </select></div>`
+            : ''
+
+          row.innerHTML = `
+            <div class="pl-sel-drag" title="Drag to reorder">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+                <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+                <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+              </svg>
+            </div>
+            <span class="pl-sel-num">${String(i + 1).padStart(2, '0')}</span>
+            <span class="pl-sel-title">${esc(v.title)}</span>
+            ${bxSelect}
+            <button class="pl-sel-remove" onclick="_plRemoveSelected(${i})" title="Remove">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          `
+
+          const handle = row.querySelector('.pl-sel-drag')
+          handle.addEventListener('mousedown', () => row.setAttribute('draggable', 'true'))
+          handle.addEventListener('mouseup', () => row.setAttribute('draggable', 'false'))
+
+          row.addEventListener('dragstart', e => {
+            _plSelDragSrc = row
+            row.classList.add('dragging')
+            e.dataTransfer.effectAllowed = 'move'
+          })
+          row.addEventListener('dragend', () => {
+            row.setAttribute('draggable', 'false')
+            row.classList.remove('dragging')
+            list.querySelectorAll('.pl-sel-item').forEach(r => r.classList.remove('drag-over'))
+            _plSelDragSrc = null
+          })
+          row.addEventListener('dragover', e => {
+            if (!_plSelDragSrc || _plSelDragSrc === row) return
+            e.preventDefault()
+            list.querySelectorAll('.pl-sel-item').forEach(r => r.classList.remove('drag-over'))
+            row.classList.add('drag-over')
+          })
+          row.addEventListener('dragleave', () => row.classList.remove('drag-over'))
+          row.addEventListener('drop', e => {
+            e.preventDefault()
+            row.classList.remove('drag-over')
+            if (!_plSelDragSrc || _plSelDragSrc === row) return
+            const fromIdx = parseInt(_plSelDragSrc.dataset.idx)
+            const toIdx = parseInt(row.dataset.idx)
+            const moved = _plSelectedVideos.splice(fromIdx, 1)[0]
+            _plSelectedVideos.splice(toIdx, 0, moved)
+            _renderPlSelected()
+          })
+
+          list.appendChild(row)
+        })
+      }
+
+      function _plChangeBx(idx, file) {
+        if (_plSelectedVideos[idx]) _plSelectedVideos[idx].selectedBx = file
+      }
+
+      // ── Title → Folder ID ─────────────────────────────────────────────────
+
+      // ── Playlist tags ──────────────────────────────────────────────────────
+
+      document.getElementById('plTagInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault()
+          const val = e.target.value.trim().replace(/,$/, '')
+          if (val) _plAddTag(val)
+          e.target.value = ''
+        } else if (e.key === 'Backspace' && e.target.value === '' && _plTags.length > 0) {
+          _plRemoveTag(_plTags[_plTags.length - 1])
+        }
+      })
+
+      function _plAddTag(tag) {
+        tag = tag.trim()
+        if (!tag || _plTags.includes(tag)) return
+        _plTags.push(tag)
+        _renderPlTags()
+      }
+
+      function _plRemoveTag(tag) {
+        _plTags = _plTags.filter(t => t !== tag)
+        _renderPlTags()
+      }
+
+      function _renderPlTags() {
+        const box = document.getElementById('plTagBox')
+        box.querySelectorAll('.pkg-tag-chip').forEach(c => c.remove())
+        const input = document.getElementById('plTagInput')
+        _plTags.forEach(tag => {
+          const chip = document.createElement('span')
+          chip.className = 'pkg-tag-chip'
+          chip.innerHTML = `${esc(tag)}<button onclick="_plRemoveTag('${esc(tag).replace(/'/g, "\\'")}')">✕</button>`
+          box.insertBefore(chip, input)
+        })
+      }
+
+      function onPlTitleInput() {
+        if (_plEditMode) return
+        if (!_plFolderIdManual) {
+          const id = titleToFolderId(document.getElementById('plTitle').value)
+          document.getElementById('plFolderId').value = id
+          document.getElementById('plFolderPreviewId').textContent = id || '…'
+        }
+      }
+
+      function onPlFolderIdInput() {
+        _plFolderIdManual = true
+        document.getElementById('plFolderPreviewId').textContent = document.getElementById('plFolderId').value || '…'
+      }
+
+      // ── Submit ─────────────────────────────────────────────────────────────
+
+      async function submitCreatePlaylist() {
+        const errorEl = document.getElementById('createPlError')
+        errorEl.textContent = ''
+
+        const title = document.getElementById('plTitle').value.trim()
+        const folderId = document.getElementById('plFolderId').value.trim()
+
+        let hasError = false
+        if (!title) { document.getElementById('plTitle').classList.add('error'); hasError = true }
+        else document.getElementById('plTitle').classList.remove('error')
+        if (!folderId) { document.getElementById('plFolderId').classList.add('error'); hasError = true }
+        else document.getElementById('plFolderId').classList.remove('error')
+        if (_plSelectedVideos.length === 0) {
+          errorEl.textContent = 'Add at least one video to the playlist.'
+          hasError = true
+        }
+        if (hasError) {
+          if (!errorEl.textContent) errorEl.textContent = 'Please fill in all required fields.'
+          return
+        }
+
+        // Build meta
+        const descRaw = document.getElementById('plDescription').value.trim()
+        const descLines = descRaw ? descRaw.split('\n').map(l => l.trimEnd()) : []
+        const author = document.getElementById('plAuthor').value.trim()
+        const meta = {
+          title,
+          videos: _plSelectedVideos.map(v => {
+            const defaultBx = v.bxFiles[0] ? v.bxFiles[0].file : null
+            if (v.bxFiles.length > 1 && v.selectedBx && v.selectedBx !== defaultBx) {
+              return { id: v.id, bxFile: v.selectedBx }
+            }
+            return v.id
+          })
+        }
+        if (author) meta.author = author
+        if (descLines.length > 1) meta.description = descLines
+        else if (descLines.length === 1) meta.description = descLines[0]
+        if (_plTags.length > 0) meta.tags = [..._plTags]
+
+        const fd = new FormData()
+        fd.append('meta', JSON.stringify(meta))
+
+        if (_plEditMode) {
+          fd.append('newFolderId', folderId)
+          if (_plThumbFile) {
+            fd.append('thumbnail', _plThumbFile, _plThumbFile.name)
+          } else if (_plExistingThumb) {
+            meta.thumbnail = _plExistingThumb
+            fd.set('meta', JSON.stringify(meta))
+          }
+        } else {
+          fd.append('folderId', folderId)
+          if (_plThumbFile) fd.append('thumbnail', _plThumbFile, _plThumbFile.name)
+        }
+
+        document.getElementById('createPlSubmitBtn').disabled = true
+        document.getElementById('createPlProgress').classList.add('active')
+        document.getElementById('createPlProgressText').textContent = _plEditMode ? 'Saving…' : 'Creating…'
+
+        try {
+          const url = _plEditMode
+            ? `${API}/manager-api/playlists/${encodeURIComponent(_plEditId)}/update`
+            : `${API}/manager-api/playlists/create`
+          const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store' })
+          const result = await res.json()
+          if (result.error) throw new Error(result.error)
+
+          closeCreatePlaylist()
+          if (_plEditMode) {
+            const renamed = result.renamed ? ` (renamed to "${folderId}")` : ''
+            showToast('success', 'Playlist updated', `"${_plEditId}" saved${renamed}.`)
+          } else {
+            showToast('success', 'Playlist created!', `"${folderId}" has been added.`)
+          }
+          await loadPlaylists(_plEditMode ? [] : [result.created || folderId])
+          setTab('playlists')
+        } catch (e) {
+          document.getElementById('createPlProgress').classList.remove('active')
+          document.getElementById('createPlSubmitBtn').disabled = false
+          errorEl.textContent = `Error: ${e.message}`
+        }
+      }
+
+      // ── Create Package (export) ────────────────────────────────────────────
+
+      let _exportVideos = []      // [{id, title, thumbnail}]
+      let _exportPlaylists = []   // [{id, title, thumbnail}]
+      let _exportSelVideos = new Set()
+      let _exportSelPlaylists = new Set()
+
+      function openCreateExport() {
+        _exportSelVideos = new Set()
+        _exportSelPlaylists = new Set()
+        document.getElementById('exportVideoSearch').value = ''
+        document.getElementById('exportPlaylistSearch').value = ''
+        document.getElementById('exportFilename').value = 'package'
+        document.getElementById('createExportError').textContent = ''
+        document.getElementById('createExportSubmitBtn').disabled = false
+        document.getElementById('createExportOverlay').classList.add('active')
+        _loadExportPools()
+      }
+
+      function closeCreateExport() {
+        document.getElementById('createExportOverlay').classList.remove('active')
+      }
+
+      async function _loadExportPools() {
+        document.getElementById('exportVideoPool').innerHTML = '<div class="pl-selected-empty">Loading…</div>'
+        document.getElementById('exportPlaylistPool').innerHTML = '<div class="pl-selected-empty">Loading…</div>'
+        try {
+          const [vRes, pRes] = await Promise.all([
+            fetch(`${API}/manager-api/videos?_t=${Date.now()}`, { cache: 'no-store' }),
+            fetch(`${API}/manager-api/playlists?_t=${Date.now()}`, { cache: 'no-store' }),
+          ])
+          const vData = await vRes.json()
+          const pData = await pRes.json()
+          _exportVideos = Array.isArray(vData) ? vData : []
+          _exportPlaylists = Array.isArray(pData) ? pData : []
+          _renderExportPool('video')
+          _renderExportPool('playlist')
+        } catch {
+          document.getElementById('exportVideoPool').innerHTML = '<div class="pl-selected-empty" style="color:var(--red)">Failed to load</div>'
+          document.getElementById('exportPlaylistPool').innerHTML = '<div class="pl-selected-empty" style="color:var(--red)">Failed to load</div>'
+        }
+      }
+
+      function _renderExportPool(type) {
+        const isVideo = type === 'video'
+        const items = isVideo ? _exportVideos : _exportPlaylists
+        const sel = isVideo ? _exportSelVideos : _exportSelPlaylists
+        const poolEl = document.getElementById(isVideo ? 'exportVideoPool' : 'exportPlaylistPool')
+        const countEl = document.getElementById(isVideo ? 'exportVideoSelCount' : 'exportPlaylistSelCount')
+        const search = document.getElementById(isVideo ? 'exportVideoSearch' : 'exportPlaylistSearch').value.toLowerCase()
+
+        countEl.textContent = sel.size ? `(${sel.size} selected)` : ''
+
+        const filtered = items.filter(item => {
+          const id = isVideo ? item._folder : item._id
+          const title = item.title || id
+          return !search || title.toLowerCase().includes(search) || id.toLowerCase().includes(search)
+        })
+
+        if (filtered.length === 0) {
+          poolEl.innerHTML = '<div class="pl-selected-empty">No items found</div>'
+          return
+        }
+
+        poolEl.innerHTML = ''
+        filtered.forEach(item => {
+          const id = isVideo ? item._folder : item._id
+          const title = item.title || id
+          const thumbUrl = item.thumbnail
+            ? (isVideo
+                ? `videos/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`
+                : `playlists/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`)
+            : null
+          const isSelected = sel.has(id)
+
+          const div = document.createElement('div')
+          div.className = 'export-pool-item' + (isSelected ? ' selected' : '')
+          div.innerHTML = `
+            <svg class="export-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              ${isSelected
+                ? '<polyline points="20 6 9 17 4 12"/>'
+                : '<rect x="3" y="3" width="18" height="18" rx="2" stroke-width="1.5"/>'}
+            </svg>
+            <div class="export-item-thumb">${thumbUrl ? `<img src="${thumbUrl}" onerror="this.style.display='none'">` : ''}</div>
+            <span class="export-item-title">${esc(title)}</span>
+            ${isVideo && item.pathCreator ? `<span class="export-item-sub">${esc(item.pathCreator)}</span>` : ''}
+            ${!isVideo && item.videos ? `<span class="export-item-sub">${item.videos.length}v</span>` : ''}
+          `
+          div.addEventListener('click', () => {
+            if (sel.has(id)) {
+              sel.delete(id)
+              // If a playlist was deselected, remove its videos from selection
+              if (!isVideo && item.videos) {
+                const videoIds = item.videos.map(v => typeof v === 'string' ? v : v.id)
+                videoIds.forEach(vid => _exportSelVideos.delete(vid))
+              }
+            } else {
+              sel.add(id)
+              // If a playlist was selected, add its videos to selection
+              if (!isVideo && item.videos) {
+                const videoIds = item.videos.map(v => typeof v === 'string' ? v : v.id)
+                videoIds.forEach(vid => _exportSelVideos.add(vid))
+              }
+            }
+            _renderExportPool('playlist')
+            _renderExportPool('video')
+          })
+          poolEl.appendChild(div)
+        })
+      }
+
+      function filterExportPool(type) { _renderExportPool(type) }
+
+      function exportSelectAll(type) {
+        const isVideo = type === 'video'
+        const items = isVideo ? _exportVideos : _exportPlaylists
+        const sel = isVideo ? _exportSelVideos : _exportSelPlaylists
+        const allIds = items.map(item => isVideo ? item._folder : item._id)
+        if (sel.size === allIds.length) {
+          // all selected → deselect all
+          sel.clear()
+        } else {
+          allIds.forEach(id => sel.add(id))
+        }
+        _renderExportPool(type)
+      }
+
+      async function submitCreateExport() {
+        const errorEl = document.getElementById('createExportError')
+        errorEl.textContent = ''
+
+        if (_exportSelVideos.size === 0 && _exportSelPlaylists.size === 0) {
+          errorEl.textContent = 'Select at least one video or playlist.'
+          return
+        }
+
+        const filename = document.getElementById('exportFilename').value.trim() || 'package'
+
+        document.getElementById('createExportSubmitBtn').disabled = true
+        errorEl.textContent = 'Building zip…'
+
+        try {
+          const res = await fetch(`${API}/manager-api/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              videos: [..._exportSelVideos],
+              playlists: [..._exportSelPlaylists],
+              filename,
+            }),
+            cache: 'no-store',
+          })
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+            throw new Error(err.error || `HTTP ${res.status}`)
+          }
+
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename.endsWith('.zip') ? filename : filename + '.zip'
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(url)
+
+          closeCreateExport()
+          showToast('success', 'Package downloaded', `${_exportSelVideos.size} video${_exportSelVideos.size !== 1 ? 's' : ''}, ${_exportSelPlaylists.size} playlist${_exportSelPlaylists.size !== 1 ? 's' : ''} exported.`)
+        } catch (e) {
+          errorEl.textContent = `Error: ${e.message}`
+        } finally {
+          document.getElementById('createExportSubmitBtn').disabled = false
+        }
+      }
+
+      document.getElementById('createExportOverlay').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('createExportOverlay')) closeCreateExport()
+      })
+      document.getElementById('createExportOverlay').addEventListener('dragover', (e) => e.stopPropagation())
+      document.getElementById('createExportOverlay').addEventListener('dragenter', (e) => e.stopPropagation())
+      document.getElementById('createExportOverlay').addEventListener('drop', (e) => e.stopPropagation())
     </script>
   </body>
 </html>
