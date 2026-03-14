@@ -669,30 +669,85 @@ def api_update_video(handler, folder_id: str):
 
 # ── Playlist duration tally ────────────────────────────────────────────────────
 
-def _tally_playlist_duration(videos: list) -> float | None:
+def _tally_playlist_duration(videos: list):
     """
-    Sum durationSecs across all video entries in a playlist.
-    Falls back to duration-in-frames / 60 fps if durationSecs is absent.
-    Returns None if no video has any duration info.
+    Sum duration across all video entries in a playlist.
+    Priority per video:
+      1. durationSecs  (float, seconds)
+      2. duration      (int, frames @ 60 fps)
+      3. probe the actual video file via a subprocess ffprobe if available
+    Always returns a float (0.0 if truly nothing can be determined).
     """
+    import subprocess
+    import shutil
+
     total = 0.0
-    found_any = False
+    has_ffprobe = shutil.which('ffprobe') is not None
+
     for entry in videos:
         folder_id = entry if isinstance(entry, str) else (entry.get('id') or entry.get('videoId') or '')
         if not folder_id:
             continue
-        meta_path = VIDEO_BASE / folder_id / 'meta.json'
+
+        folder = VIDEO_BASE / folder_id
+        meta_path = folder / 'meta.json'
+
+        video_dur = None
+
+        # ── 1. Read from meta.json ──────────────────────────────────────────
         try:
-            meta = read_json(meta_path)
+            vmeta = read_json(meta_path)
+            if vmeta.get('durationSecs') is not None:
+                video_dur = float(vmeta['durationSecs'])
+            elif vmeta.get('duration') is not None:
+                video_dur = float(vmeta['duration']) / 60.0  # frames → secs @ 60fps
         except Exception:
-            continue
-        if meta.get('durationSecs') is not None:
-            total += float(meta['durationSecs'])
-            found_any = True
-        elif meta.get('duration') is not None:
-            total += float(meta['duration']) / 60.0   # frames @ 60 fps
-            found_any = True
-    return total if found_any else None
+            vmeta = {}
+
+        # ── 2. Probe the video file if still unknown ────────────────────────
+        if video_dur is None and has_ffprobe:
+            video_file = vmeta.get('videoFile') if vmeta else None
+            if not video_file:
+                # Guess: look for any video file in the folder
+                for ext in ('.mp4', '.webm', '.mkv', '.mov'):
+                    candidate = folder / (folder_id + ext)
+                    if candidate.exists():
+                        video_file = candidate.name
+                        break
+                if not video_file and folder.is_dir():
+                    for f in sorted(folder.iterdir()):
+                        if f.suffix.lower() in ('.mp4', '.webm', '.mkv', '.mov'):
+                            video_file = f.name
+                            break
+            if video_file:
+                video_path = folder / video_file
+                if video_path.exists():
+                    try:
+                        result = subprocess.run(
+                            ['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                             '-show_format', str(video_path)],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        import json as _json
+                        probe = _json.loads(result.stdout)
+                        dur = float(probe.get('format', {}).get('duration', 0))
+                        if dur > 0:
+                            video_dur = dur
+                            # Persist so future saves don't need to probe again
+                            try:
+                                vmeta['durationSecs'] = round(dur, 3)
+                                write_json(meta_path, vmeta)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+        if video_dur is not None:
+            total += video_dur
+        else:
+            print(f'[tally] Warning: no duration found for video "{folder_id}"', flush=True)
+
+    return total
 
 
 # ── API: create playlist ───────────────────────────────────────────────────────
@@ -733,8 +788,7 @@ def api_create_playlist(handler):
 
         # Tally total runtime from video metas
         total_dur = _tally_playlist_duration(meta.get('videos', []))
-        if total_dur is not None:
-            meta['totalDurationSecs'] = round(total_dur, 3)
+        meta['totalDurationSecs'] = round(total_dur, 3)
 
         write_json(folder_path / 'meta.json', meta)
 
@@ -811,8 +865,7 @@ def api_update_playlist(handler, folder_id: str):
 
         # Tally total runtime from video metas
         total_dur = _tally_playlist_duration(meta.get('videos', []))
-        if total_dur is not None:
-            meta['totalDurationSecs'] = round(total_dur, 3)
+        meta['totalDurationSecs'] = round(total_dur, 3)
 
         write_json(folder_path / 'meta.json', meta)
         bump_version()

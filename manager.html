@@ -879,7 +879,7 @@
         border: 1px solid var(--border2);
         border-radius: var(--radius-lg);
         width: 100%;
-        max-width: 820px;
+        max-width: 1000px;
         box-shadow: 0 24px 80px rgba(0,0,0,0.7);
         display: flex;
         flex-direction: column;
@@ -914,12 +914,12 @@
       .create-export-body {
         padding: 1.5rem;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 1.5rem;
       }
 
       /* ── Export selection columns ── */
-      .export-col { display: flex; flex-direction: column; gap: 0.75rem; }
+      .export-col { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
 
       .export-pool {
         display: flex; flex-direction: column; gap: 3px;
@@ -1224,6 +1224,14 @@
         flex-direction: column;
         animation: fadeUp 0.2s ease both;
         margin: auto;
+        flex-shrink: 0;
+      }
+
+      .create-pkg-body {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
       }
 
       .create-pkg-header {
@@ -1278,13 +1286,6 @@
         flex-shrink: 0;
       }
       .create-pkg-close:hover { color: var(--text); border-color: var(--border2); }
-
-      .create-pkg-body {
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
-      }
 
       /* ── Sections ── */
       .pkg-section-title {
@@ -4310,9 +4311,23 @@
             ${!isVideo && item.videos ? `<span class="export-item-sub">${item.videos.length}v</span>` : ''}
           `
           div.addEventListener('click', () => {
-            if (sel.has(id)) sel.delete(id)
-            else sel.add(id)
-            _renderExportPool(type)
+            if (sel.has(id)) {
+              sel.delete(id)
+              // If a playlist was deselected, remove its videos from selection
+              if (!isVideo && item.videos) {
+                const videoIds = item.videos.map(v => typeof v === 'string' ? v : v.id)
+                videoIds.forEach(vid => _exportSelVideos.delete(vid))
+              }
+            } else {
+              sel.add(id)
+              // If a playlist was selected, add its videos to selection
+              if (!isVideo && item.videos) {
+                const videoIds = item.videos.map(v => typeof v === 'string' ? v : v.id)
+                videoIds.forEach(vid => _exportSelVideos.add(vid))
+              }
+            }
+            _renderExportPool('playlist')
+            _renderExportPool('video')
           })
           poolEl.appendChild(div)
         })

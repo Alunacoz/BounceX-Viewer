@@ -90,7 +90,9 @@ function buildPlaylistHTML(playlist, metas) {
       const thumbSrc = m.thumbnail
         ? `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(m.thumbnail)}`
         : null
-      const timecode = framesToTimecode(m.duration || 0)
+      const timecode = m.durationSecs != null
+        ? framesToTimecode(Math.round(m.durationSecs * 60))
+        : framesToTimecode(m.duration || 0)
       return `
       <div class="playlist-track-item" id="ptrack-${i}" data-index="${i}">
         <div class="ptrack-num">${i + 1}</div>
@@ -149,11 +151,7 @@ function buildPlaylistHTML(playlist, metas) {
             : ''
         }
       </div>
-      ${playlist.description
-          ? (Array.isArray(playlist.description)
-              ? playlist.description.map(p => `<p class="video-description" style="margin-top:1rem">${renderDescription(p)}</p>`).join('')
-              : `<p class="video-description" style="margin-top:1rem">${renderDescription(playlist.description)}</p>`)
-          : ''}
+      ${playlist.description ? `<p class="video-description" style="margin-top:1rem"><strong>Playlist Description:</strong> ${escHtml(playlist.description)}</p>` : ''}
     </div>
   </div>
 
@@ -232,7 +230,9 @@ function setupPlaylistPlayer(playlist, metas) {
       meta.bxFile
 
     let newPath
-    let newTotalFrames = meta.duration || 14400
+    let newTotalFrames = meta.durationSecs != null
+      ? Math.round(meta.durationSecs * 60)
+      : (meta.duration || 14400)
     try {
       const bxRaw = await fetchText(
         `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(bxFileToLoad)}`,
