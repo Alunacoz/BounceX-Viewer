@@ -230,6 +230,7 @@ function setupPlaylistPlayer(playlist, metas) {
       meta.bxFile
 
     let newPath
+    let newEffects = []
     let newTotalFrames = meta.durationSecs != null
       ? Math.round(meta.durationSecs * 60)
       : (meta.duration || 14400)
@@ -237,14 +238,18 @@ function setupPlaylistPlayer(playlist, metas) {
       const bxRaw = await fetchText(
         `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(bxFileToLoad)}`,
       )
-      const markerData = JSON.parse(bxRaw)
+      const parsedBx = JSON.parse(bxRaw)
+      const isBx2 = parsedBx.version === 2
+      const markerData = isBx2 ? parsedBx.markers : parsedBx
+      const bxEffects  = isBx2 && Array.isArray(parsedBx.effects) ? parsedBx.effects : []
       newPath = buildPath(markerData, newTotalFrames)
+      newEffects = bxEffects
     } catch (e) {
       console.warn('Could not load bx file:', e)
       newPath = new Float32Array(newTotalFrames).fill(0)
     }
 
-    engine.loadBxData(newPath, newTotalFrames)
+    engine.loadBxData(newPath, newTotalFrames, newEffects)
     engine.setOffset(typeof meta.offset === 'number' ? meta.offset : 0)
     engine.resetSmoothTime()
 
@@ -263,12 +268,14 @@ function setupPlaylistPlayer(playlist, metas) {
           .addEventListener('change', async (e) => {
             const b = bxSources[parseInt(e.target.value)]
             try {
-              const data = JSON.parse(
-                await fetchText(
-                  `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(b.file)}`,
-                ),
+              const rawSel = await fetchText(
+                `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(b.file)}`,
               )
-              engine.loadBxData(buildPath(data, newTotalFrames), newTotalFrames)
+              const parsedSel = JSON.parse(rawSel)
+              const isBx2Sel  = parsedSel.version === 2
+              const dataSel   = isBx2Sel ? parsedSel.markers : parsedSel
+              const effSel    = isBx2Sel && Array.isArray(parsedSel.effects) ? parsedSel.effects : []
+              engine.loadBxData(buildPath(dataSel, newTotalFrames), newTotalFrames, effSel)
             } catch (err) {
               console.warn('Could not load bx file:', err)
             }

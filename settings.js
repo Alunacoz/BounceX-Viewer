@@ -17,6 +17,8 @@ const DEFAULTS = {
   defaultFlipY: false,
   defaultZoom: 0.25,
   defaultPathSpeed: 1.0,
+  effectsColorEnabled: true,
+  effectsTextEnabled: true,
 }
 
 function getSettings() {
