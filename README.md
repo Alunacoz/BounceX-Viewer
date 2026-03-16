@@ -22,6 +22,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 📦 Easy Imports: Just drag in a .zip file to add new videos!
 - 📱 Cross-Device Access: Watch on any device (including mobile!) on your local network!
 - 🏃 Path Speed Adjustment: Want to slow it down or speed it up? Go ahead!
+- 🪄 Effects: Able to render special effects from paths created with [BX-Editor-FX](https://github.com/Alunacoz/BX-Editor-FX)!
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Getting Started
