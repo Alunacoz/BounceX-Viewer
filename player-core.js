@@ -781,28 +781,35 @@ function createPlayerEngine(opts) {
         const fadeAlpha = getEffectFadeAlpha(ef, curFrameExact) * (ef.opacity ?? 1)
         if (fadeAlpha <= 0) continue
         const fontFamily = ef.font || 'sans-serif'
-        // Scale font and position relative to the *path area* height, not the
-        // full canvas height. In non-overlay mode pathAreaH === H (no change).
-        // In overlay mode pathAreaH shrinks with zoom, so text scales with it.
-        // pathAreaH = bottomY - topY so posY 0%=top-of-path, 100%=bottom-of-path
+        // pathAreaH = bottomY - topY; font scales with it so overlay/zoom work
         const pathAreaH = bottomY - topY
-        const actualFontSize = Math.max(4, Math.round((ef.fontSize || 50) / 100 * pathAreaH))
+        let actualFontSize = Math.max(4, Math.round((ef.fontSize || 50) / 100 * pathAreaH))
         const tx = W * ((ef.posX ?? 50) / 100)
         const ty = topY + pathAreaH * ((ef.posY ?? 50) / 100)
         ctx.save()
         ctx.globalAlpha  = fadeAlpha
-        ctx.font         = `${actualFontSize}px '${fontFamily}', sans-serif`
         ctx.textAlign    = 'center'
         ctx.textBaseline = 'alphabetic'
         ctx.fillStyle    = ef.color || '#ffffff'
         ctx.shadowColor  = 'rgba(0,0,0,0.8)'
+
+        const lines = String(ef.text || '').split('\n')
+        const maxAllowedW = W * 0.92   // 4% margin each side
+
+        // Measure at nominal size, shrink font if widest line overflows
+        ctx.font = `${actualFontSize}px '${fontFamily}', sans-serif`
+        const widestLine = lines.reduce((max, l) => Math.max(max, ctx.measureText(l).width), 0)
+        if (widestLine > maxAllowedW) {
+          actualFontSize = Math.max(4, Math.floor(actualFontSize * maxAllowedW / widestLine))
+          ctx.font = `${actualFontSize}px '${fontFamily}', sans-serif`
+        }
+
         ctx.shadowBlur   = Math.max(2, Math.ceil(actualFontSize / 10))
-        // Use actual glyph metrics to find true visual center (not em-square middle)
+        // Use actual glyph metrics for precise vertical centering
         const m = ctx.measureText('Ag')
         const vAsc  = m.actualBoundingBoxAscent  ?? actualFontSize * 0.72
         const vDesc = m.actualBoundingBoxDescent ?? actualFontSize * 0.18
         const baselineAdjust = vAsc - (vAsc + vDesc) / 2
-        const lines = String(ef.text || '').split('\n')
         const lineH = actualFontSize * 1.25
         lines.forEach((line, li) => {
           const lineCenterY = ty + (li - (lines.length - 1) / 2) * lineH
