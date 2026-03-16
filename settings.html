@@ -187,6 +187,23 @@
             </label>
           </section>
 
+          <section class="settings-section">
+            <h2 class="settings-section-title">Effects <span style="font-size:0.75rem;opacity:0.5;font-weight:400">.bx2 only</span></h2>
+            <p style="font-size:0.82rem;opacity:0.55;margin-bottom:0.75rem">
+              These effects are embedded in .bx2 path files by the BounceX Editor. Disable any you don't want shown.
+            </p>
+            <label class="settings-row">
+              <input type="checkbox" id="effectsColorEnabled" name="effectsColorEnabled" />
+              <span class="settings-label">Path color effects</span>
+              <span class="settings-hint">Smooth colour transitions on the path &amp; ball</span>
+            </label>
+            <label class="settings-row">
+              <input type="checkbox" id="effectsTextEnabled" name="effectsTextEnabled" />
+              <span class="settings-label">Text overlays</span>
+              <span class="settings-hint">Text displayed over the path preview</span>
+            </label>
+          </section>
+
           <div class="settings-actions">
             <button type="submit" class="settings-btn settings-btn-primary">
               Save
@@ -235,6 +252,8 @@
         defaultZoomValue.textContent = s.defaultZoom
         document.getElementById('defaultPathSpeed').value = String(s.defaultPathSpeed)
         defaultPathSpeedValue.textContent = s.defaultPathSpeed + '×'
+        document.getElementById('effectsColorEnabled').checked = s.effectsColorEnabled !== false
+        document.getElementById('effectsTextEnabled').checked  = s.effectsTextEnabled  !== false
       }
 
       function rgbaToHex(rgba) {
@@ -278,6 +297,8 @@
           defaultFlipY: document.getElementById('defaultFlipY').checked,
           defaultZoom: parseFloat(document.getElementById('defaultZoom').value),
           defaultPathSpeed: parseFloat(document.getElementById('defaultPathSpeed').value),
+          effectsColorEnabled: document.getElementById('effectsColorEnabled').checked,
+          effectsTextEnabled:  document.getElementById('effectsTextEnabled').checked,
         })
         defaultZoomValue.textContent =
           document.getElementById('defaultZoom').value

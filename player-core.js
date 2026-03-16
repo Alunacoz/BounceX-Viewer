@@ -220,6 +220,48 @@ function buildColors(userSettings) {
   }
 }
 
+// ── BX2 Effect Helpers ────────────────────────────────────────────────────────
+
+function getEffectFadeAlpha(ef, frame) {
+  if (frame < ef.startFrame || frame > ef.endFrame) return 0
+  const dur = ef.endFrame - ef.startFrame
+  const el  = frame - ef.startFrame
+  let alpha = 1.0
+  const fi = ef.fadeIn  ?? 0
+  const fo = ef.fadeOut ?? 0
+  if (fi > 0 && el < fi)            alpha = Math.min(alpha, el / fi)
+  if (fo > 0 && el > dur - fo)      alpha = Math.min(alpha, (dur - el) / fo)
+  return Math.max(0, Math.min(1, alpha))
+}
+
+function hexToRgbArr(hex) {
+  const h = String(hex || '#888888').replace('#', '').padEnd(6, '0')
+  const n = parseInt(h, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+function lerpRgbArr(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ]
+}
+
+function getEffectiveColorRgb(effects, frame, basePathHex, baseBallHex, settings) {
+  let pathRgb = hexToRgbArr(basePathHex)
+  let ballRgb = hexToRgbArr(baseBallHex)
+  if (settings && settings.effectsColorEnabled === false) return { pathRgb, ballRgb }
+  for (const ef of effects) {
+    if (ef.type !== 'pathColor') continue
+    const alpha = getEffectFadeAlpha(ef, frame)
+    if (alpha <= 0) continue
+    if (ef.pathColor) pathRgb = lerpRgbArr(pathRgb, hexToRgbArr(ef.pathColor), alpha)
+    if (ef.ballColor) ballRgb = lerpRgbArr(ballRgb, hexToRgbArr(ef.ballColor), alpha)
+  }
+  return { pathRgb, ballRgb }
+}
+
 // ── HTML Builders ────────────────────────────────────────────────────────────
 
 /**
@@ -421,7 +463,7 @@ function buildControlsHTML({
 //   onProgress()             called on progress/loadedmetadata (update load bar)
 //
 // Returned API:
-//   loadBxData(path, totalFrames)  swap in new path data (playlist: each track)
+//   loadBxData(path, totalFrames, effects)  swap in new path data + bx2 effects
 //   resetSmoothTime()              reset smooth-time to 0 (playlist: each track)
 //   resizeCanvas()                 force a canvas resize (playlist: after loadTrack)
 //   setOffset(secs)                update path start offset in seconds
@@ -469,7 +511,8 @@ function createPlayerEngine(opts) {
   const COLORS = buildColors(userSettings)
 
   // Mutable state
-  let activePath = null
+  let activePath    = null
+  let activeEffects = []   // bx2 effects array for the current path
   let totalFrames = 14400
   let smoothTime = 0
   let lastRafTime = null
@@ -622,17 +665,54 @@ function createPlayerEngine(opts) {
     ctx.stroke()
 
     // Waveform path with horizontal fade gradient
-    const pxPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
-    const framesVisible = Math.ceil(W / pxPerFrame) + 2
-    const startFrame = Math.max(0, Math.floor(curFrameExact) - Math.floor(framesVisible / 2))
-    const endFrame = Math.min(totalFrames - 1, Math.max(0, Math.floor(curFrameExact)) + framesVisible)
+    // Per-frame speed integration: each frame's x is computed by accumulating
+    // (pxPerFrame * speedAt(f)) from the playhead outward, so only frames inside
+    // a speed effect zone get stretched — frames outside stay at normal spacing.
+    const basePixPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
 
-    const pathRgb = COLORS.pathColor.match(/^#([0-9a-fA-F]{6})$/)
-      ? (() => {
-          const n = parseInt(COLORS.pathColor.slice(1), 16)
-          return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-        })()
-      : [240, 180, 41]
+    function viewerSpeedAt(f) {
+      let s = 1.0
+      for (const ef of activeEffects) {
+        if (ef.type !== 'pathSpeed') continue
+        const fade = getEffectFadeAlpha(ef, f)
+        if (fade <= 0) continue
+        s = 1.0 + ((ef.speed || 1.0) - 1.0) * fade
+      }
+      return s
+    }
+
+    const visRange = Math.ceil(W / basePixPerFrame) + 4
+    const viewerXCache = new Map()
+    viewerXCache.set(curFrameExact, ballX)
+
+    let xAccR = ballX
+    const vMaxF = Math.min(totalFrames - 1, Math.ceil(curFrameExact) + visRange)
+    for (let f = Math.ceil(curFrameExact); f <= vMaxF; f++) {
+      xAccR += basePixPerFrame * viewerSpeedAt(f - 0.5)
+      viewerXCache.set(f, xAccR)
+    }
+    let xAccL = ballX
+    const vMinF = Math.max(0, Math.floor(curFrameExact) - visRange)
+    for (let f = Math.floor(curFrameExact); f >= vMinF; f--) {
+      if (!viewerXCache.has(f)) {
+        xAccL -= basePixPerFrame * viewerSpeedAt(f + 0.5)
+        viewerXCache.set(f, xAccL)
+      }
+    }
+    function viewerFrameToX(f) {
+      if (viewerXCache.has(f)) return viewerXCache.get(f)
+      const fl = Math.floor(f), fr = Math.ceil(f)
+      const xl = viewerXCache.get(fl) ?? (ballX + (fl - curFrameExact) * basePixPerFrame)
+      const xr = viewerXCache.get(fr) ?? (ballX + (fr - curFrameExact) * basePixPerFrame)
+      return xl + (xr - xl) * (f - fl)
+    }
+
+    const startFrame = vMinF
+    const endFrame   = vMaxF
+
+    const { pathRgb, ballRgb } = getEffectiveColorRgb(
+      activeEffects, curFrameExact, COLORS.pathColor, COLORS.ball, userSettings
+    )
     const [pr, pg, pb] = pathRgb
     const pathGrad = ctx.createLinearGradient(0, 0, W, 0)
     pathGrad.addColorStop(0, `rgba(${pr},${pg},${pb},0)`)
@@ -651,7 +731,7 @@ function createPlayerEngine(opts) {
     for (let f = startFrame; f <= endFrame; f++) {
       const d = activePath[f]
       if (d < 0) continue
-      const x = ballX + (f - curFrameExact) * pxPerFrame
+      const x = viewerFrameToX(f)
       const displayD = flipY ? 1 - d : d
       const y = bottomY + displayD * (topY - bottomY)
       if (!pathStarted) {
@@ -680,7 +760,7 @@ function createPlayerEngine(opts) {
     // Ball
     ctx.beginPath()
     ctx.arc(ballX, ballY, BALL_R, 0, Math.PI * 2)
-    ctx.fillStyle = COLORS.ball
+    ctx.fillStyle = `rgb(${ballRgb[0]},${ballRgb[1]},${ballRgb[2]})`
     ctx.fill()
 
     // Playhead line (outside clip, spans full height)
@@ -693,6 +773,51 @@ function createPlayerEngine(opts) {
     ctx.lineTo(ballX, H)
     ctx.stroke()
     ctx.setLineDash([])
+
+    // ── Text effects (bx2) ────────────────────────────────────────────────────
+    if (userSettings.effectsTextEnabled !== false) {
+      for (const ef of activeEffects) {
+        if (ef.type !== 'text') continue
+        const fadeAlpha = getEffectFadeAlpha(ef, curFrameExact) * (ef.opacity ?? 1)
+        if (fadeAlpha <= 0) continue
+        const fontFamily = ef.font || 'sans-serif'
+        // pathAreaH = bottomY - topY; font scales with it so overlay/zoom work
+        const pathAreaH = bottomY - topY
+        let actualFontSize = Math.max(4, Math.round((ef.fontSize || 50) / 100 * pathAreaH))
+        const tx = W * ((ef.posX ?? 50) / 100)
+        const ty = topY + pathAreaH * ((ef.posY ?? 50) / 100)
+        ctx.save()
+        ctx.globalAlpha  = fadeAlpha
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'alphabetic'
+        ctx.fillStyle    = ef.color || '#ffffff'
+        ctx.shadowColor  = 'rgba(0,0,0,0.8)'
+
+        const lines = String(ef.text || '').split('\n')
+        const maxAllowedW = W * 0.92   // 4% margin each side
+
+        // Measure at nominal size, shrink font if widest line overflows
+        ctx.font = `${actualFontSize}px '${fontFamily}', sans-serif`
+        const widestLine = lines.reduce((max, l) => Math.max(max, ctx.measureText(l).width), 0)
+        if (widestLine > maxAllowedW) {
+          actualFontSize = Math.max(4, Math.floor(actualFontSize * maxAllowedW / widestLine))
+          ctx.font = `${actualFontSize}px '${fontFamily}', sans-serif`
+        }
+
+        ctx.shadowBlur   = Math.max(2, Math.ceil(actualFontSize / 10))
+        // Use actual glyph metrics for precise vertical centering
+        const m = ctx.measureText('Ag')
+        const vAsc  = m.actualBoundingBoxAscent  ?? actualFontSize * 0.72
+        const vDesc = m.actualBoundingBoxDescent ?? actualFontSize * 0.18
+        const baselineAdjust = vAsc - (vAsc + vDesc) / 2
+        const lineH = actualFontSize * 1.25
+        lines.forEach((line, li) => {
+          const lineCenterY = ty + (li - (lines.length - 1) / 2) * lineH
+          ctx.fillText(line, tx, lineCenterY + baselineAdjust)
+        })
+        ctx.restore()
+      }
+    }
 
     if (onFrame) onFrame(curFrame, curDepth)
   }
@@ -1030,9 +1155,10 @@ function createPlayerEngine(opts) {
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
     /** Swap in new bx path data (used by playlist on each track change). */
-    loadBxData(path, frames) {
-      activePath = path
-      totalFrames = frames
+    loadBxData(path, frames, effects = []) {
+      activePath    = path
+      totalFrames   = frames
+      activeEffects = Array.isArray(effects) ? effects : []
     },
     /** Reset smooth-time interpolation (used by playlist on each track change). */
     resetSmoothTime() {

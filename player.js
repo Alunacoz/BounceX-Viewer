@@ -64,7 +64,12 @@ async function loadPlayer(id) {
         const url = `${VIDEO_BASE}/${encodeURIComponent(id)}/${encodeURIComponent(b.file)}`
         const raw = await fetchText(url)
         try {
-          return { label: b.label || 'Default', file: b.file, data: JSON.parse(raw) }
+          const parsed = JSON.parse(raw)
+          // Support both plain .bx (object of frame→array) and .bx2 (versioned with markers+effects)
+          const isBx2 = parsed.version === 2
+          const markerData = isBx2 ? parsed.markers : parsed
+          const effects    = isBx2 && Array.isArray(parsed.effects) ? parsed.effects : []
+          return { label: b.label || 'Default', file: b.file, data: markerData, effects }
         } catch (e) {
           throw new Error(`Could not load bx file "${b.file}": ${e.message}`)
         }
@@ -371,7 +376,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     onFrame,
   })
 
-  engine.loadBxData(path, totalFrames)
+  engine.loadBxData(path, totalFrames, bxSources[0].effects || [])
 
   // ── Auto-detect real duration from the video element ───────────────────────
   function onVideoMetadataLoaded() {
@@ -384,7 +389,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     })
 
     const activeIdx = bxSelect ? parseInt(bxSelect.value) || 0 : 0
-    engine.loadBxData(bxSources[activeIdx]._path || path, realFrames)
+    engine.loadBxData(bxSources[activeIdx]._path || path, realFrames, bxSources[activeIdx].effects || [])
 
     const statDur = document.getElementById('statDuration')
     const statFr = document.getElementById('statFrames')
@@ -433,7 +438,7 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
       const src = bxSources[parseInt(bxSelect.value)]
       const newMarkers = markersFromData(src.data)
       const newPath = src._path || buildPath(src.data, totalFrames)
-      engine.loadBxData(newPath, totalFrames)
+      engine.loadBxData(newPath, totalFrames, src.effects || [])
       activeMarkers = newMarkers
       document.getElementById('sidebarBxFile').textContent = src.file
       rebuildMarkerList(newMarkers)
