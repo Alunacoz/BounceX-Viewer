@@ -665,13 +665,53 @@ function createPlayerEngine(opts) {
     ctx.stroke()
 
     // Waveform path with horizontal fade gradient
-    const pxPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
-    const framesVisible = Math.ceil(W / pxPerFrame) + 2
-    const startFrame = Math.max(0, Math.floor(curFrameExact) - Math.floor(framesVisible / 2))
-    const endFrame = Math.min(totalFrames - 1, Math.max(0, Math.floor(curFrameExact)) + framesVisible)
+    // Per-frame speed integration: each frame's x is computed by accumulating
+    // (pxPerFrame * speedAt(f)) from the playhead outward, so only frames inside
+    // a speed effect zone get stretched — frames outside stay at normal spacing.
+    const basePixPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
+
+    function viewerSpeedAt(f) {
+      let s = 1.0
+      for (const ef of activeEffects) {
+        if (ef.type !== 'pathSpeed') continue
+        const fade = getEffectFadeAlpha(ef, f)
+        if (fade <= 0) continue
+        s = 1.0 + ((ef.speed || 1.0) - 1.0) * fade
+      }
+      return s
+    }
+
+    const visRange = Math.ceil(W / basePixPerFrame) + 4
+    const viewerXCache = new Map()
+    viewerXCache.set(curFrameExact, ballX)
+
+    let xAccR = ballX
+    const vMaxF = Math.min(totalFrames - 1, Math.ceil(curFrameExact) + visRange)
+    for (let f = Math.ceil(curFrameExact); f <= vMaxF; f++) {
+      xAccR += basePixPerFrame * viewerSpeedAt(f - 0.5)
+      viewerXCache.set(f, xAccR)
+    }
+    let xAccL = ballX
+    const vMinF = Math.max(0, Math.floor(curFrameExact) - visRange)
+    for (let f = Math.floor(curFrameExact); f >= vMinF; f--) {
+      if (!viewerXCache.has(f)) {
+        xAccL -= basePixPerFrame * viewerSpeedAt(f + 0.5)
+        viewerXCache.set(f, xAccL)
+      }
+    }
+    function viewerFrameToX(f) {
+      if (viewerXCache.has(f)) return viewerXCache.get(f)
+      const fl = Math.floor(f), fr = Math.ceil(f)
+      const xl = viewerXCache.get(fl) ?? (ballX + (fl - curFrameExact) * basePixPerFrame)
+      const xr = viewerXCache.get(fr) ?? (ballX + (fr - curFrameExact) * basePixPerFrame)
+      return xl + (xr - xl) * (f - fl)
+    }
+
+    const startFrame = vMinF
+    const endFrame   = vMaxF
 
     const { pathRgb, ballRgb } = getEffectiveColorRgb(
-      activeEffects, curFrame, COLORS.pathColor, COLORS.ball, userSettings
+      activeEffects, curFrameExact, COLORS.pathColor, COLORS.ball, userSettings
     )
     const [pr, pg, pb] = pathRgb
     const pathGrad = ctx.createLinearGradient(0, 0, W, 0)
@@ -691,7 +731,7 @@ function createPlayerEngine(opts) {
     for (let f = startFrame; f <= endFrame; f++) {
       const d = activePath[f]
       if (d < 0) continue
-      const x = ballX + (f - curFrameExact) * pxPerFrame
+      const x = viewerFrameToX(f)
       const displayD = flipY ? 1 - d : d
       const y = bottomY + displayD * (topY - bottomY)
       if (!pathStarted) {
@@ -738,26 +778,35 @@ function createPlayerEngine(opts) {
     if (userSettings.effectsTextEnabled !== false) {
       for (const ef of activeEffects) {
         if (ef.type !== 'text') continue
-        const fadeAlpha = getEffectFadeAlpha(ef, curFrame) * (ef.opacity ?? 1)
+        const fadeAlpha = getEffectFadeAlpha(ef, curFrameExact) * (ef.opacity ?? 1)
         if (fadeAlpha <= 0) continue
         const fontFamily = ef.font || 'sans-serif'
-        // fontSize is stored as % of canvas height for consistent scaling
-        // fontSize is always % of canvas height — consistent across all display modes
-        const actualFontSize = Math.max(4, Math.round((ef.fontSize || 8) / 100 * H))
+        // Scale font and position relative to the *path area* height, not the
+        // full canvas height. In non-overlay mode pathAreaH === H (no change).
+        // In overlay mode pathAreaH shrinks with zoom, so text scales with it.
+        // pathAreaH = bottomY - topY so posY 0%=top-of-path, 100%=bottom-of-path
+        const pathAreaH = bottomY - topY
+        const actualFontSize = Math.max(4, Math.round((ef.fontSize || 50) / 100 * pathAreaH))
+        const tx = W * ((ef.posX ?? 50) / 100)
+        const ty = topY + pathAreaH * ((ef.posY ?? 50) / 100)
         ctx.save()
         ctx.globalAlpha  = fadeAlpha
         ctx.font         = `${actualFontSize}px '${fontFamily}', sans-serif`
         ctx.textAlign    = 'center'
-        ctx.textBaseline = 'middle'
+        ctx.textBaseline = 'alphabetic'
         ctx.fillStyle    = ef.color || '#ffffff'
         ctx.shadowColor  = 'rgba(0,0,0,0.8)'
         ctx.shadowBlur   = Math.max(2, Math.ceil(actualFontSize / 10))
-        const tx = W * ((ef.posX ?? 50) / 100)
-        const ty = H * ((ef.posY ?? 80) / 100)
+        // Use actual glyph metrics to find true visual center (not em-square middle)
+        const m = ctx.measureText('Ag')
+        const vAsc  = m.actualBoundingBoxAscent  ?? actualFontSize * 0.72
+        const vDesc = m.actualBoundingBoxDescent ?? actualFontSize * 0.18
+        const baselineAdjust = vAsc - (vAsc + vDesc) / 2
         const lines = String(ef.text || '').split('\n')
         const lineH = actualFontSize * 1.25
         lines.forEach((line, li) => {
-          ctx.fillText(line, tx, ty + (li - (lines.length - 1) / 2) * lineH)
+          const lineCenterY = ty + (li - (lines.length - 1) / 2) * lineH
+          ctx.fillText(line, tx, lineCenterY + baselineAdjust)
         })
         ctx.restore()
       }
