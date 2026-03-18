@@ -65,8 +65,8 @@ async function loadPlayer(id) {
         const raw = await fetchText(url)
         try {
           const parsed = JSON.parse(raw)
-          // Support both plain .bx (object of frame→array) and .bx2 (versioned with markers+effects)
-          const isBx2 = parsed.version === 2
+          // Support plain .bx, version:2 at root, and new meta.version structure
+          const isBx2 = parsed.version === 2 || parsed.meta?.version === 2
           const markerData = isBx2 ? parsed.markers : parsed
           const effects    = isBx2 && Array.isArray(parsed.effects) ? parsed.effects : []
           return { label: b.label || 'Default', file: b.file, data: markerData, effects }

@@ -239,7 +239,7 @@ function setupPlaylistPlayer(playlist, metas) {
         `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(bxFileToLoad)}`,
       )
       const parsedBx = JSON.parse(bxRaw)
-      const isBx2 = parsedBx.version === 2
+      const isBx2 = parsedBx.version === 2 || parsedBx.meta?.version === 2
       const markerData = isBx2 ? parsedBx.markers : parsedBx
       const bxEffects  = isBx2 && Array.isArray(parsedBx.effects) ? parsedBx.effects : []
       newPath = buildPath(markerData, newTotalFrames)
@@ -272,7 +272,7 @@ function setupPlaylistPlayer(playlist, metas) {
                 `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(b.file)}`,
               )
               const parsedSel = JSON.parse(rawSel)
-              const isBx2Sel  = parsedSel.version === 2
+              const isBx2Sel  = parsedSel.version === 2 || parsedSel.meta?.version === 2
               const dataSel   = isBx2Sel ? parsedSel.markers : parsedSel
               const effSel    = isBx2Sel && Array.isArray(parsedSel.effects) ? parsedSel.effects : []
               engine.loadBxData(buildPath(dataSel, newTotalFrames), newTotalFrames, effSel)
