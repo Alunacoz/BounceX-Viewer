@@ -42,18 +42,6 @@
         gap: 0.5rem;
       }
 
-      .header-search .manager-search-clear {
-        background: none;
-        border: none;
-        color: var(--text3);
-        cursor: pointer;
-        font-size: 11px;
-        padding: 0 4px;
-        line-height: 1;
-      }
-      .header-search .manager-search-clear:hover { color: var(--text); }
-      .list-item-hidden { display: none !important; }
-
       .import-btn {
         display: inline-flex;
         align-items: center;
@@ -1912,15 +1900,6 @@
           <div class="status-dot" id="statusDot"></div>
           <span id="statusText">Manager</span>
         </div>
-        <div class="header-search">
-          <span class="search-icon">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <circle cx="9" cy="9" r="5.5"/>
-              <line x1="13.5" y1="13.5" x2="17" y2="17"/>
-            </svg>
-          </span>
-          <input type="text" id="managerSearch" placeholder="search videos, playlists…" autocomplete="off" oninput="filterManagerList(this.value)">
-        </div>
         <nav class="header-nav" style="margin-left: auto">
           <a href="#" data-main-page="index.html">Browse</a>
           <a href="#" data-main-page="about.html">About</a>
@@ -2729,31 +2708,6 @@
         document
           .getElementById('panelPlaylists')
           .classList.toggle('active', tab === 'playlists')
-        // Re-apply any active search to the newly visible list
-        const q = document.getElementById('managerSearch')?.value || ''
-        if (q) filterManagerList(q)
-      }
-
-      function filterManagerList(query) {
-        const q = query.trim().toLowerCase()
-        const clearBtn = document.getElementById('managerSearchClear')
-        if (clearBtn) clearBtn.style.display = q ? '' : 'none'
-        ;['videoList', 'playlistList'].forEach(listId => {
-          const items = document.getElementById(listId)
-            .querySelectorAll('.content-item')
-          items.forEach(item => {
-            const match = !q || (item.dataset.search || '').includes(q)
-            item.classList.toggle('list-item-hidden', !match)
-          })
-        })
-      }
-
-      function clearManagerSearch() {
-        const input = document.getElementById('managerSearch')
-        if (!input) return
-        input.value = ''
-        filterManagerList('')
-        input.focus()
       }
 
       // ── Load ─────────────────────────────────────────────────────────────
@@ -2764,9 +2718,6 @@
           loadVideos(newVideoIds),
           loadPlaylists(newPlaylistIds),
         ])
-        // Re-apply search filter so results stay filtered after a refresh
-        const q = document.getElementById('managerSearch')?.value || ''
-        if (q) filterManagerList(q)
       }
 
       async function loadVideos(highlightIds = []) {
@@ -3015,7 +2966,6 @@
         el.setAttribute('draggable', 'false')
         el.dataset.id = v._folder
         el.dataset.type = 'video'
-        el.dataset.search = [v.title, v._folder, v.pathCreator, v.videoCreator].filter(Boolean).join(' ').toLowerCase()
         el.innerHTML = `
       <div class="item-drag-handle" title="Drag to reorder">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3075,7 +3025,6 @@
         el.setAttribute('draggable', 'false')
         el.dataset.id = p._id
         el.dataset.type = 'playlist'
-        el.dataset.search = [p.title, p._id, p.author].filter(Boolean).join(' ').toLowerCase()
         el.innerHTML = `
       <div class="item-drag-handle" title="Drag to reorder">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4412,10 +4361,11 @@
         const filename = document.getElementById('exportFilename').value.trim() || 'package'
 
         document.getElementById('createExportSubmitBtn').disabled = true
-        errorEl.textContent = 'Building zip…'
+        errorEl.textContent = 'Preparing download…'
 
         try {
-          const res = await fetch(`${API}/manager-api/export`, {
+          // Step 1: POST the selection → server stores it and returns a one-use token
+          const res = await fetch(`${API}/manager-api/export-token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -4431,18 +4381,14 @@
             throw new Error(err.error || `HTTP ${res.status}`)
           }
 
-          const blob = await res.blob()
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = filename.endsWith('.zip') ? filename : filename + '.zip'
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(url)
+          const { token } = await res.json()
+
+          // Step 2: navigate directly to the download URL — the browser's native
+          // download manager handles it with no fetch timeout.
+          window.location.href = `${API}/manager-api/export-download?token=${token}`
 
           closeCreateExport()
-          showToast('success', 'Package downloaded', `${_exportSelVideos.size} video${_exportSelVideos.size !== 1 ? 's' : ''}, ${_exportSelPlaylists.size} playlist${_exportSelPlaylists.size !== 1 ? 's' : ''} exported.`)
+          showToast('success', 'Download started', `${_exportSelVideos.size} video${_exportSelVideos.size !== 1 ? 's' : ''}, ${_exportSelPlaylists.size} playlist${_exportSelPlaylists.size !== 1 ? 's' : ''} — check your downloads.`)
         } catch (e) {
           errorEl.textContent = `Error: ${e.message}`
         } finally {

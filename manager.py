@@ -894,7 +894,6 @@ def api_export_package(handler):
     if not video_ids and not playlist_ids:
         return {"error": "No videos or playlists selected"}, 400
 
-    # Validate all ids
     for vid in video_ids:
         if '/' in vid or '\\' in vid or vid in ('.', '..'):
             return {"error": f"Invalid video id: {vid}"}, 400
@@ -902,43 +901,156 @@ def api_export_package(handler):
         if '/' in pid or '\\' in pid or pid in ('.', '..'):
             return {"error": f"Invalid playlist id: {pid}"}, 400
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for vid in video_ids:
-            folder = VIDEO_BASE / vid
-            if not folder.is_dir():
-                continue
-            for file_path in sorted(folder.rglob('*')):
-                if file_path.is_file():
-                    arc_name = f"videos/{vid}/{file_path.relative_to(folder)}"
-                    zf.write(file_path, arc_name)
-
-        for pid in playlist_ids:
-            folder = PLAYLIST_BASE / pid
-            if not folder.is_dir():
-                continue
-            for file_path in sorted(folder.rglob('*')):
-                if file_path.is_file():
-                    arc_name = f"playlists/{pid}/{file_path.relative_to(folder)}"
-                    zf.write(file_path, arc_name)
-
-    zip_bytes = buf.getvalue()
     filename = body.get('filename', 'package').strip() or 'package'
-    # Sanitise filename
     filename = re.sub(r'[^\w\-. ]', '_', filename).strip()
     if not filename.endswith('.zip'):
         filename += '.zip'
 
-    handler.send_response(200)
-    handler.send_header('Content-Type', 'application/zip')
-    handler.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-    handler.send_header('Content-Length', str(len(zip_bytes)))
-    handler.send_header('Access-Control-Allow-Origin', '*')
-    handler.send_header('Cache-Control', 'no-store')
-    handler.end_headers()
-    handler.wfile.write(zip_bytes)
+    # Write to a temp file instead of an in-memory BytesIO so we never hold
+    # the entire (potentially multi-GB) zip in RAM at once.
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    tmp_path = tmp.name
+    try:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            for vid in video_ids:
+                folder = VIDEO_BASE / vid
+                if not folder.is_dir():
+                    continue
+                for file_path in sorted(folder.rglob('*')):
+                    if file_path.is_file():
+                        arc_name = f"videos/{vid}/{file_path.relative_to(folder)}"
+                        zf.write(file_path, arc_name)
+
+            for pid in playlist_ids:
+                folder = PLAYLIST_BASE / pid
+                if not folder.is_dir():
+                    continue
+                for file_path in sorted(folder.rglob('*')):
+                    if file_path.is_file():
+                        arc_name = f"playlists/{pid}/{file_path.relative_to(folder)}"
+                        zf.write(file_path, arc_name)
+
+        zip_size = Path(tmp_path).stat().st_size
+
+        handler.send_response(200)
+        handler.send_header('Content-Type', 'application/zip')
+        handler.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+        handler.send_header('Content-Length', str(zip_size))
+        handler.send_header('Access-Control-Allow-Origin', '*')
+        handler.send_header('Cache-Control', 'no-store')
+        handler.end_headers()
+
+        # Stream the zip to the client in 4 MB chunks — never holds full zip in RAM
+        CHUNK = 4 * 1024 * 1024
+        with open(tmp_path, 'rb') as f:
+            while True:
+                chunk = f.read(CHUNK)
+                if not chunk:
+                    break
+                try:
+                    handler.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    break  # client disconnected mid-download
+
+    finally:
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
     return None, None   # already sent
 
+
+
+# ── Export token store (in-memory, one-use) ────────────────────────────────────
+import secrets
+_export_tokens = {}   # token -> {videos, playlists, filename}
+
+def api_export_token(handler):
+    """POST: store export job, return a one-use token."""
+    content_length = int(handler.headers.get('Content-Length', 0))
+    if content_length == 0:
+        return {"error": "Empty request body"}, 400
+    try:
+        body = json.loads(handler.rfile.read(content_length))
+    except json.JSONDecodeError as e:
+        return {"error": f"Invalid JSON: {e}"}, 400
+
+    video_ids    = [v for v in body.get('videos', [])    if isinstance(v, str)]
+    playlist_ids = [p for p in body.get('playlists', []) if isinstance(p, str)]
+    if not video_ids and not playlist_ids:
+        return {"error": "No videos or playlists selected"}, 400
+
+    for vid in video_ids:
+        if '/' in vid or '\\' in vid or vid in ('.', '..'):
+            return {"error": f"Invalid video id: {vid}"}, 400
+    for pid in playlist_ids:
+        if '/' in pid or '\\' in pid or pid in ('.', '..'):
+            return {"error": f"Invalid playlist id: {pid}"}, 400
+
+    token = secrets.token_urlsafe(32)
+    _export_tokens[token] = {
+        "videos":    video_ids,
+        "playlists": playlist_ids,
+        "filename":  body.get("filename", "package"),
+    }
+    return {"token": token}, 200
+
+
+def api_export_download(handler, token):
+    """GET: consume token, build zip, stream to browser via native download."""
+    job = _export_tokens.pop(token, None)
+    if job is None:
+        return {"error": "Invalid or expired token"}, 404
+
+    video_ids    = job["videos"]
+    playlist_ids = job["playlists"]
+    filename     = re.sub(r'[^\w\-. ]', '_', job["filename"].strip()) or "package"
+    if not filename.endswith(".zip"):
+        filename += ".zip"
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp_path = tmp.name
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            for vid in video_ids:
+                folder = VIDEO_BASE / vid
+                if not folder.is_dir():
+                    continue
+                for file_path in sorted(folder.rglob("*")):
+                    if file_path.is_file():
+                        zf.write(file_path, f"videos/{vid}/{file_path.relative_to(folder)}")
+            for pid in playlist_ids:
+                folder = PLAYLIST_BASE / pid
+                if not folder.is_dir():
+                    continue
+                for file_path in sorted(folder.rglob("*")):
+                    if file_path.is_file():
+                        zf.write(file_path, f"playlists/{pid}/{file_path.relative_to(folder)}")
+
+        zip_size = Path(tmp_path).stat().st_size
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/zip")
+        handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        handler.send_header("Content-Length", str(zip_size))
+        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.send_header("Cache-Control", "no-store")
+        handler.end_headers()
+
+        CHUNK = 4 * 1024 * 1024
+        with open(tmp_path, "rb") as f:
+            while True:
+                chunk = f.read(CHUNK)
+                if not chunk:
+                    break
+                try:
+                    handler.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    break
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    return None, None
 
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
@@ -952,6 +1064,19 @@ class ManagerHandler(SimpleHTTPRequestHandler):
             self._send_json({"httpPort": HTTP_PORT, "managerPort": PORT})
         elif path == "/manager-api/version":
             self._send_json({"version": _version})
+        elif path == "/manager-api/export-download":
+            from urllib.parse import parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            token = qs.get("token", [None])[0]
+            if not token:
+                self._send_json({"error": "Missing token"}, 400)
+            else:
+                try:
+                    result, status = api_export_download(self, token)
+                    if result is not None:
+                        self._send_json(result, status)
+                except Exception as e:
+                    self._send_json({"error": str(e)}, 500)
         elif path == "/manager-api/videos":
             self._send_json(*api_videos())
         elif path == "/manager-api/playlists":
@@ -1004,11 +1129,10 @@ class ManagerHandler(SimpleHTTPRequestHandler):
                 self._send_json(*api_update_playlist(self, pl_id))
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
-        elif path == "/manager-api/export":
+        elif path == "/manager-api/export-token":
             try:
-                result, status = api_export_package(self)
-                if result is not None:   # error path — normal JSON response
-                    self._send_json(result, status)
+                result, status = api_export_token(self)
+                self._send_json(result, status)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
         elif path.startswith("/manager-api/videos/") and path.endswith("/meta"):
