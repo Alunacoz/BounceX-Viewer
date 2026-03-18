@@ -188,10 +188,14 @@
           </section>
 
           <section class="settings-section">
-            <h2 class="settings-section-title">Effects <span style="font-size:0.75rem;opacity:0.5;font-weight:400">.bx2 only</span></h2>
+            <h2 class="settings-section-title">Effects</h2>
             <p style="font-size:0.82rem;opacity:0.55;margin-bottom:0.75rem">
-              These effects are embedded in .bx2 path files by the BounceX Editor. Disable any you don't want shown.
+              These effects are embedded in .bx path files by the BounceX Editor. Disable any you don't want shown.
             </p>
+            <div style="display:flex;gap:8px;margin-bottom:0.6rem">
+              <button type="button" class="settings-btn settings-btn-secondary" id="effectsEnableAll" style="font-size:0.78rem;padding:3px 10px">Enable all</button>
+              <button type="button" class="settings-btn settings-btn-secondary" id="effectsDisableAll" style="font-size:0.78rem;padding:3px 10px">Disable all</button>
+            </div>
             <label class="settings-row">
               <input type="checkbox" id="effectsColorEnabled" name="effectsColorEnabled" />
               <span class="settings-label">Path color effects</span>
@@ -201,6 +205,11 @@
               <input type="checkbox" id="effectsTextEnabled" name="effectsTextEnabled" />
               <span class="settings-label">Text overlays</span>
               <span class="settings-hint">Text displayed over the path preview</span>
+            </label>
+            <label class="settings-row">
+              <input type="checkbox" id="effectsSpeedEnabled" name="effectsSpeedEnabled" />
+              <span class="settings-label">Path speed changes</span>
+              <span class="settings-hint">Dynamic waveform speed transitions</span>
             </label>
           </section>
 
@@ -254,6 +263,7 @@
         defaultPathSpeedValue.textContent = s.defaultPathSpeed + '×'
         document.getElementById('effectsColorEnabled').checked = s.effectsColorEnabled !== false
         document.getElementById('effectsTextEnabled').checked  = s.effectsTextEnabled  !== false
+        document.getElementById('effectsSpeedEnabled').checked = s.effectsSpeedEnabled !== false
       }
 
       function rgbaToHex(rgba) {
@@ -282,6 +292,14 @@
         el.classList.add('visible')
       }
 
+      const effectCheckboxIds = ['effectsColorEnabled', 'effectsTextEnabled', 'effectsSpeedEnabled']
+      document.getElementById('effectsEnableAll').addEventListener('click', () => {
+        effectCheckboxIds.forEach(id => { document.getElementById(id).checked = true })
+      })
+      document.getElementById('effectsDisableAll').addEventListener('click', () => {
+        effectCheckboxIds.forEach(id => { document.getElementById(id).checked = false })
+      })
+
       form.addEventListener('submit', (e) => {
         e.preventDefault()
         setSettings({
@@ -299,6 +317,7 @@
           defaultPathSpeed: parseFloat(document.getElementById('defaultPathSpeed').value),
           effectsColorEnabled: document.getElementById('effectsColorEnabled').checked,
           effectsTextEnabled:  document.getElementById('effectsTextEnabled').checked,
+          effectsSpeedEnabled: document.getElementById('effectsSpeedEnabled').checked,
         })
         defaultZoomValue.textContent =
           document.getElementById('defaultZoom').value
