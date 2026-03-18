@@ -3455,6 +3455,38 @@
         const svg = drop.querySelector('svg')
         if (svg) svg.style.color = 'var(--teal)'
         document.getElementById(`bxLabel_${idx}`).textContent = f.name
+
+        // When adding the FIRST .bx file to a NEW video (not editing an existing one),
+        // read its meta block and pre-fill title, path creator, and BPM if present.
+        const isNewVideo = !_pkgEditMode
+        const isFirstEntry = idx === 0 || Object.values(_bxEntries).filter(Boolean).length === 1
+        if (isNewVideo && isFirstEntry) {
+          const reader = new FileReader()
+          reader.onload = ev => {
+            try {
+              const parsed = JSON.parse(ev.target.result)
+              const metaVersion = parsed.meta?.version
+              const isV2 = metaVersion === 2 || metaVersion === 2.0 || parsed.version === 2 || parsed.version === 2.0
+              if (!isV2 || !parsed.meta) return
+              const m = parsed.meta
+              const titleEl = document.getElementById('pkgTitle')
+              const pathCreatorEl = document.getElementById('pkgPathCreator')
+              const bpmEl = document.getElementById('pkgBpm')
+              // Only pre-fill if the field is currently empty
+              if (m.title && titleEl && !titleEl.value.trim()) {
+                titleEl.value = m.title
+                onTitleInput()  // trigger folder-id auto-generation
+              }
+              if (m.path_creator && pathCreatorEl && !pathCreatorEl.value.trim()) {
+                pathCreatorEl.value = m.path_creator
+              }
+              if (m.bpm != null && bpmEl && !bpmEl.value.trim()) {
+                bpmEl.value = m.bpm
+              }
+            } catch (_) {}
+          }
+          reader.readAsText(f)
+        }
       }
 
       function removeBxEntry(idx) {

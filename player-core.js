@@ -671,6 +671,7 @@ function createPlayerEngine(opts) {
     const basePixPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
 
     function viewerSpeedAt(f) {
+      if (userSettings.effectsSpeedEnabled === false) return 1.0
       let s = 1.0
       for (const ef of activeEffects) {
         if (ef.type !== 'pathSpeed') continue

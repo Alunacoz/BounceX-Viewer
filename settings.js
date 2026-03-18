@@ -19,6 +19,7 @@ const DEFAULTS = {
   defaultPathSpeed: 1.0,
   effectsColorEnabled: true,
   effectsTextEnabled: true,
+  effectsSpeedEnabled: true,
 }
 
 function getSettings() {
