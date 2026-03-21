@@ -39,10 +39,16 @@ async function loadPlayer(id) {
     // meta.json is optional — fall back to folder-name defaults if absent
     let meta
     try {
-      meta = await fetchJSON(`${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`)
+      meta = await fetchJSON(
+        `${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`,
+      )
     } catch (e) {
       if (/HTTP 404/.test(e.message)) {
-        meta = { title: id, videoFile: `${id}.mp4`, bxFiles: [{ label: 'Default', file: `${id}.bx` }] }
+        meta = {
+          title: id,
+          videoFile: `${id}.mp4`,
+          bxFiles: [{ label: 'Default', file: `${id}.bx` }],
+        }
       } else {
         throw e
       }
@@ -68,8 +74,16 @@ async function loadPlayer(id) {
           // Support plain .bx, version:2 at root, and new meta.version structure
           const isBx2 = parsed.version === 2 || parsed.meta?.version === 2
           const markerData = isBx2 ? parsed.markers : parsed
-          const effects    = isBx2 && Array.isArray(parsed.effects) ? parsed.effects : []
-          return { label: b.label || 'Default', file: b.file, data: markerData, effects }
+          const effects =
+            isBx2 && Array.isArray(parsed.effects) ? parsed.effects : []
+          const markers = markersFromData(markerData)
+          return {
+            label: b.label || 'Default',
+            file: b.file,
+            data: markerData,
+            effects,
+            _peaks: findPeaks(markers),
+          }
         } catch (e) {
           throw new Error(`Could not load bx file "${b.file}": ${e.message}`)
         }
@@ -94,6 +108,20 @@ async function loadPlayer(id) {
     layout.innerHTML = `<div class="error-msg">Failed to load video.<br><small>${escHtml(e.message)}</small></div>`
     console.error(e)
   }
+}
+
+/** Compute peak marker frames — markers where depth > both neighbours. */
+function findPeaks(sortedMarkers) {
+  const peaks = []
+  for (let i = 1; i < sortedMarkers.length - 1; i++) {
+    if (
+      sortedMarkers[i].depth > sortedMarkers[i - 1].depth &&
+      sortedMarkers[i].depth > sortedMarkers[i + 1].depth
+    ) {
+      peaks.push(sortedMarkers[i].frame)
+    }
+  }
+  return peaks
 }
 
 /** Parse a raw markerData object into a sorted marker array. */
@@ -376,7 +404,12 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     onFrame,
   })
 
-  engine.loadBxData(path, totalFrames, bxSources[0].effects || [])
+  engine.loadBxData(
+    path,
+    totalFrames,
+    bxSources[0].effects || [],
+    bxSources[0]._peaks || [],
+  )
 
   // ── Auto-detect real duration from the video element ───────────────────────
   function onVideoMetadataLoaded() {
@@ -389,7 +422,12 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
     })
 
     const activeIdx = bxSelect ? parseInt(bxSelect.value) || 0 : 0
-    engine.loadBxData(bxSources[activeIdx]._path || path, realFrames, bxSources[activeIdx].effects || [])
+    engine.loadBxData(
+      bxSources[activeIdx]._path || path,
+      realFrames,
+      bxSources[activeIdx].effects || [],
+      bxSources[activeIdx]._peaks || [],
+    )
 
     const statDur = document.getElementById('statDuration')
     const statFr = document.getElementById('statFrames')
@@ -398,7 +436,8 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
   }
 
   video.addEventListener('loadedmetadata', onVideoMetadataLoaded)
-  if (Number.isFinite(video.duration) && video.duration > 0) onVideoMetadataLoaded()
+  if (Number.isFinite(video.duration) && video.duration > 0)
+    onVideoMetadataLoaded()
   function wireMarkerClicks() {
     markerListEl.querySelectorAll('.marker-list-item').forEach((item) => {
       item.addEventListener('click', () => {
@@ -438,7 +477,12 @@ function setupPlayer(meta, id, path, markers, totalFrames, bxSources) {
       const src = bxSources[parseInt(bxSelect.value)]
       const newMarkers = markersFromData(src.data)
       const newPath = src._path || buildPath(src.data, totalFrames)
-      engine.loadBxData(newPath, totalFrames, src.effects || [])
+      engine.loadBxData(
+        newPath,
+        totalFrames,
+        src.effects || [],
+        src._peaks || [],
+      )
       activeMarkers = newMarkers
       document.getElementById('sidebarBxFile').textContent = src.file
       rebuildMarkerList(newMarkers)

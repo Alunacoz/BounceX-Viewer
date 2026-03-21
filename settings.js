@@ -20,6 +20,7 @@ const DEFAULTS = {
   effectsColorEnabled: true,
   effectsTextEnabled: true,
   effectsSpeedEnabled: true,
+  dhMode: false,
 }
 
 function getSettings() {
