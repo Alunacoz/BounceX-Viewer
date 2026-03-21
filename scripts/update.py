@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-ROOT        = Path(__file__).parent.resolve()
+ROOT        = Path(__file__).parent.parent.resolve()   # scripts/ → project root
 GITHUB_REPO = "Alunacoz/BounceX-Viewer"
 BRANCH      = "main"
 ZIP_URL     = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{BRANCH}.zip"
@@ -32,7 +32,7 @@ PRESERVE = {
     "config.json",
     "venv",
     ".git",
-    "update.py",       # don't overwrite ourselves mid-run
+    "scripts",     # don't overwrite the scripts dir mid-run (update.py lives here)
     "Update.bat",
     "Update.ps1",
     "Update.sh",

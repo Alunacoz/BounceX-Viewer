@@ -1,10 +1,13 @@
 # bump-sw.py — run this before starting the server
 import re, time
+from pathlib import Path
+
+ROOT = Path(__file__).parent.parent.resolve()   # scripts/ → project root
 
 version = int(time.time())
-file = 'sw.js'
+file = ROOT / "app" / "sw.js"
 
-with open(file, 'r') as f:
+with open(file, "r") as f:
     content = f.read()
 
 updated = re.sub(
@@ -13,7 +16,7 @@ updated = re.sub(
     content
 )
 
-with open(file, 'w') as f:
+with open(file, "w") as f:
     f.write(updated)
 
-print(f'✓ Cache version bumped to bx-video-v{version}')
+print(f"✓ Cache version bumped to bx-video-v{version}")
