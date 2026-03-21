@@ -8,6 +8,8 @@ const BX_SETTINGS_KEY = 'bx_viewer_settings'
 const DEFAULTS = {
   pathColor: '#f0b429',
   ballColor: '#ffffff',
+  bgColor: '#0a0b0f',
+  bgTransparent: true,
   topLineInactive: '#ffffff',
   topLineActive: '#3dd6c8',
   bottomLineInactive: '#ffffff',
