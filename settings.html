@@ -73,6 +73,23 @@
                   class="settings-color"
                 />
               </label>
+              <label class="settings-row">
+                <span class="settings-label">Background color</span>
+                <input
+                  type="color"
+                  id="bgColor"
+                  name="bgColor"
+                  class="settings-color"
+                />
+              </label>
+              <label class="settings-check" style="grid-column: 1/-1">
+                <input
+                  type="checkbox"
+                  id="bgTransparent"
+                  name="bgTransparent"
+                />
+                <span>Semi-transparent background (like overlay)</span>
+              </label>
             </div>
           </section>
 
@@ -300,6 +317,9 @@
         const s = getSettings()
         document.getElementById('pathColor').value = s.pathColor
         document.getElementById('ballColor').value = s.ballColor
+        document.getElementById('bgColor').value = s.bgColor || '#0a0b0f'
+        document.getElementById('bgTransparent').checked =
+          s.bgTransparent !== false
         document.getElementById('topLineInactive').value =
           rgbaToHex(s.topLineInactive) || s.topLineInactive || '#ffffff'
         document.getElementById('topLineActive').value = s.topLineActive
@@ -375,6 +395,8 @@
         setSettings({
           pathColor: document.getElementById('pathColor').value,
           ballColor: document.getElementById('ballColor').value,
+          bgColor: document.getElementById('bgColor').value,
+          bgTransparent: document.getElementById('bgTransparent').checked,
           topLineInactive: document.getElementById('topLineInactive').value,
           topLineActive: document.getElementById('topLineActive').value,
           bottomLineInactive:
