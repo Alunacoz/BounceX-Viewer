@@ -1,4 +1,5 @@
 # BounceX Viewer - Updater
+# Double-click, or: powershell -ExecutionPolicy Bypass -File Update.ps1
 
 Set-Location $PSScriptRoot
 
@@ -16,7 +17,8 @@ if (Test-Path "$PSScriptRoot\venv\Scripts\python.exe") {
 }
 if (-not $py) {
     Write-Host "  Python 3 not found. Install from https://www.python.org/" -ForegroundColor Red
-    Read-Host "  Press Enter to exit"; exit 1
+    Read-Host "  Press Enter to exit"
+    exit 1
 }
 
 & $py scripts\update.py
