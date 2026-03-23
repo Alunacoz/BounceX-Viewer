@@ -39,6 +39,8 @@ If you run into any issues, try a hard refresh:
 
 This resolves most caching issues that may occur. This also may erase some settings.
 
+Another known issue is that **large** .zips (import and export) may appear to freeze or fail altogether with this site. I'm looking into it, but 6+ GB playlists failed to export for example, so I had to do it manually.
+
 **Need more help?** Check the existing examples in the `/videos/` directory for reference implementations or ask me directly on Discord! You can find me in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC), and my DMs are open!
 
 
