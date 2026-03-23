@@ -16,7 +16,8 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-ROOT = Path(__file__).parent.resolve()
+ROOT = Path(__file__).parent.parent.resolve()   # scripts/ → project root
+APP_DIR = ROOT / "app"
 VIDEO_BASE = ROOT / "videos"
 PLAYLIST_BASE = ROOT / "playlists"
 
@@ -1056,12 +1057,25 @@ def api_export_download(handler, token):
 
 class ManagerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(APP_DIR), **kwargs)
 
     def do_GET(self):
         path = urlparse(self.path).path.rstrip("/")
         if path == "/manager-api/config":
             self._send_json({"httpPort": HTTP_PORT, "managerPort": PORT})
+        elif path == "/config.json":
+            # Serve config.json from root (not app/) — needed by nav-config.js
+            try:
+                with open(ROOT / "config.json", "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except OSError:
+                self.send_error(404)
         elif path == "/manager-api/version":
             self._send_json({"version": _version})
         elif path == "/manager-api/export-download":

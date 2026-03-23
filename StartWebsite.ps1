@@ -3,12 +3,10 @@
 
 Set-Location $PSScriptRoot
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
 function Step  { param($m) Write-Host "  >> $m" -ForegroundColor Yellow }
 function Ok    { param($m) Write-Host "  OK $m" -ForegroundColor Green }
 function Fail  { param($m) Write-Host "  !! $m" -ForegroundColor Red }
 
-# ── Header ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  BounceX Launcher" -ForegroundColor Cyan
 Write-Host ""
@@ -50,7 +48,6 @@ if (-not $pythonCmd) {
     exit 1
 }
 
-# ── 2. Create venv if missing ──────────────────────────────────────────────────
 if (-not (Test-Path "venv\Scripts\python.exe")) {
     Step "Creating virtual environment..."
     & $pythonCmd -m venv venv
@@ -62,36 +59,16 @@ if (-not (Test-Path "venv\Scripts\python.exe")) {
     Ok "Virtual environment created."
 }
 
-$py  = "$PSScriptRoot\venv\Scripts\python.exe"
-$pip = "$PSScriptRoot\venv\Scripts\pip.exe"
+$py = "$PSScriptRoot\venv\Scripts\python.exe"
 
-# ── 3. Install requirements if needed ─────────────────────────────────────────
-Step "Checking dependencies..."
-& $py -c "import RangeHTTPServer" 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Step "Installing requirements.txt..."
-    & $pip install -r requirements.txt --quiet
-    if ($LASTEXITCODE -ne 0) {
-        Fail "Dependency install failed."
-        Read-Host "Press Enter to exit"
-        exit 1
-    }
-    Ok "Dependencies installed."
-} else {
-    Ok "Dependencies already satisfied."
+if (Test-Path "scripts\bump-sw.py") {
+    & $py scripts\bump-sw.py 2>$null
 }
 
-# ── 4. Bump service worker ─────────────────────────────────────────────────────
-if (Test-Path "bump-sw.py") {
-    & $py bump-sw.py 2>$null
-}
-
-# ── 5. Read config ─────────────────────────────────────────────────────────────
 $configRaw = Get-Content "config.json" -Raw | ConvertFrom-Json
 $httpPort = $configRaw.httpPort
 $managerPort = $configRaw.managerPort
 
-# ── 6. Detect local IP ────────────────────────────────────────────────────────
 $localIP = $null
 try {
     $localIP = (Get-NetIPAddress -AddressFamily IPv4 |
@@ -101,7 +78,6 @@ try {
 } catch { }
 if (-not $localIP) { $localIP = "localhost" }
 
-# ── 7. Launch servers ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  On your local network, open this URL on any device:" -ForegroundColor Cyan
 Write-Host "  Home page  ->  http://${localIP}:$httpPort" -ForegroundColor Green
@@ -114,14 +90,14 @@ $serverProc  = $null
 
 try {
     $managerProc = Start-Process -FilePath $py `
-        -ArgumentList "manager.py" `
+        -ArgumentList "scripts\manager.py" `
         -WorkingDirectory $PSScriptRoot `
         -WindowStyle Hidden `
         -PassThru
     Ok "Manager started (PID $($managerProc.Id))"
 
     $serverProc = Start-Process -FilePath $py `
-        -ArgumentList "-m", "RangeHTTPServer", "$httpPort", "--bind", "0.0.0.0" `
+        -ArgumentList "scripts\server.py" `
         -WorkingDirectory $PSScriptRoot `
         -WindowStyle Hidden `
         -PassThru
@@ -129,7 +105,6 @@ try {
 
     Start-Process "http://localhost:$httpPort"
 
-    # Block here until Ctrl+C or a process dies
     while ($true) {
         Start-Sleep -Seconds 1
         if ($managerProc.HasExited) {
@@ -142,10 +117,8 @@ try {
         }
     }
 } finally {
-    # Runs on Ctrl+C, window close, or natural exit — always
     Write-Host ""
     Step "Shutting down..."
-
     if ($serverProc -and -not $serverProc.HasExited) {
         Stop-Process -Id $serverProc.Id -Force -ErrorAction SilentlyContinue
         Ok "HTTP server stopped."
@@ -154,7 +127,6 @@ try {
         Stop-Process -Id $managerProc.Id -Force -ErrorAction SilentlyContinue
         Ok "Manager stopped."
     }
-
     Write-Host ""
     Read-Host "  Press Enter to exit"
 }
