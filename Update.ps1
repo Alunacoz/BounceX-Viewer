@@ -1,9 +1,9 @@
-# BounceX Viewer — Updater
+# BounceX Viewer - Updater
 
 Set-Location $PSScriptRoot
 
 Write-Host ""
-Write-Host "  BounceX Viewer — Updater" -ForegroundColor Cyan
+Write-Host "  BounceX Viewer - Updater" -ForegroundColor Cyan
 Write-Host ""
 
 $py = $null
