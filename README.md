@@ -23,6 +23,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 📱 Cross-Device Access: Watch on any device (including mobile!) on your local network!
 - 🏃 Path Speed Adjustment: Want to slow it down or speed it up? Go ahead!
 - 🪄 Effects: Able to render special effects from paths created with [BX-Editor-FX](https://github.com/Alunacoz/BX-Editor-FX)!
+- 🎸 DH Mode: Don't like waveforms? Automatically (but not perfectly!) convert .bx paths into simple circles in the settings!
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Getting Started
