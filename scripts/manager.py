@@ -13,6 +13,7 @@ import sys
 import tempfile
 import zipfile
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -998,8 +999,68 @@ def api_export_token(handler):
     return {"token": token}, 200
 
 
+# ── Chunked transfer writer ────────────────────────────────────────────────────
+# Wraps handler.wfile so zipfile can write directly to the HTTP response
+# without buffering the entire archive in RAM or on disk first.
+# Uses HTTP/1.1 chunked transfer encoding: each write is framed as
+#   <hex-length>\r\n<data>\r\n
+# terminated by a zero-length chunk.
+
+class _ChunkedWriter:
+    FLUSH_SIZE = 2 * 1024 * 1024  # flush to client every 2 MB
+
+    def __init__(self, wfile):
+        self._wfile = wfile
+        self._buf   = bytearray()
+        self._pos   = 0   # logical bytes written — zipfile uses this for offsets
+
+    def write(self, data):
+        self._buf.extend(data)
+        self._pos += len(data)
+        if len(self._buf) >= self.FLUSH_SIZE:
+            self._flush()
+        return len(data)
+
+    def flush(self):
+        self._flush()
+
+    def _flush(self):
+        if not self._buf:
+            return
+        chunk = bytes(self._buf)
+        self._buf = bytearray()
+        try:
+            self._wfile.write(f"{len(chunk):x}\r\n".encode())
+            self._wfile.write(chunk)
+            self._wfile.write(b"\r\n")
+            self._wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def close(self):
+        self._flush()
+        try:
+            self._wfile.write(b"0\r\n\r\n")
+            self._wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    # Returning False makes zipfile use streaming data descriptors per entry,
+    # but tell() must still return accurate offsets so the central directory is valid.
+    def seekable(self): return False
+    def tell(self):     return self._pos
+
+
+# Already-compressed extensions — store them as-is, don't waste CPU deflating
+_STORED_EXTS = {
+    ".mp4", ".webm", ".mkv", ".mov", ".avi",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp",
+    ".zip", ".gz", ".bz2", ".xz", ".zst",
+}
+
+
 def api_export_download(handler, token):
-    """GET: consume token, build zip, stream to browser via native download."""
+    """GET: consume token, stream zip directly to browser via chunked encoding."""
     job = _export_tokens.pop(token, None)
     if job is None:
         return {"error": "Invalid or expired token"}, 404
@@ -1010,46 +1071,44 @@ def api_export_download(handler, token):
     if not filename.endswith(".zip"):
         filename += ".zip"
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    tmp_path = tmp.name
+    # Send headers immediately — browser sees the download start right away
+    handler.protocol_version = "HTTP/1.1"
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/zip")
+    handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+    handler.send_header("Transfer-Encoding", "chunked")
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+
+    writer = _ChunkedWriter(handler.wfile)
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        with zipfile.ZipFile(writer, "w", allowZip64=True) as zf:
+            def add_folder(base_path, arc_prefix):
+                for file_path in sorted(base_path.rglob("*")):
+                    if not file_path.is_file():
+                        continue
+                    compress = (
+                        zipfile.ZIP_STORED
+                        if file_path.suffix.lower() in _STORED_EXTS
+                        else zipfile.ZIP_DEFLATED
+                    )
+                    arc_name = f"{arc_prefix}/{file_path.relative_to(base_path)}"
+                    zf.write(file_path, arc_name, compress_type=compress)
+
             for vid in video_ids:
                 folder = VIDEO_BASE / vid
-                if not folder.is_dir():
-                    continue
-                for file_path in sorted(folder.rglob("*")):
-                    if file_path.is_file():
-                        zf.write(file_path, f"videos/{vid}/{file_path.relative_to(folder)}")
+                if folder.is_dir():
+                    add_folder(folder, f"videos/{vid}")
+
             for pid in playlist_ids:
                 folder = PLAYLIST_BASE / pid
-                if not folder.is_dir():
-                    continue
-                for file_path in sorted(folder.rglob("*")):
-                    if file_path.is_file():
-                        zf.write(file_path, f"playlists/{pid}/{file_path.relative_to(folder)}")
-
-        zip_size = Path(tmp_path).stat().st_size
-        handler.send_response(200)
-        handler.send_header("Content-Type", "application/zip")
-        handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-        handler.send_header("Content-Length", str(zip_size))
-        handler.send_header("Access-Control-Allow-Origin", "*")
-        handler.send_header("Cache-Control", "no-store")
-        handler.end_headers()
-
-        CHUNK = 4 * 1024 * 1024
-        with open(tmp_path, "rb") as f:
-            while True:
-                chunk = f.read(CHUNK)
-                if not chunk:
-                    break
-                try:
-                    handler.wfile.write(chunk)
-                except (BrokenPipeError, ConnectionResetError):
-                    break
+                if folder.is_dir():
+                    add_folder(folder, f"playlists/{pid}")
+    except (BrokenPipeError, ConnectionResetError):
+        pass   # client disconnected mid-download — not an error
     finally:
-        Path(tmp_path).unlink(missing_ok=True)
+        writer.close()
 
     return None, None
 
@@ -1064,7 +1123,7 @@ class ManagerHandler(SimpleHTTPRequestHandler):
         if path == "/manager-api/config":
             self._send_json({"httpPort": HTTP_PORT, "managerPort": PORT})
         elif path == "/config.json":
-            # Serve config.json from root (not app/) — needed by nav-config.js
+            # nav-config.js fetches /config.json from whatever port it's on
             try:
                 with open(ROOT / "config.json", "rb") as f:
                     body = f.read()
@@ -1194,8 +1253,12 @@ class ManagerHandler(SimpleHTTPRequestHandler):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+class _ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle each request in its own thread so large downloads don't block the manager."""
+    daemon_threads = True
+
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), ManagerHandler)
+    server = _ThreadingHTTPServer(("0.0.0.0", PORT), ManagerHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
