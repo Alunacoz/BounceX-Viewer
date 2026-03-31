@@ -26,6 +26,22 @@ This program was written with generative AI, with human intervention as well. I 
 - 🎸 DH Mode: Don't like waveforms? Automatically (but not perfectly!) convert .bx paths into simple circles in the settings!
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
+## Example Screenshots
+<img width="2555" height="620" alt="image" src="https://github.com/user-attachments/assets/457f246f-4a65-449e-bbbf-b6d26abe3fcc" />
+<p align="center">The main dashboard!</p>
+
+<img width="2554" height="1091" alt="image" src="https://github.com/user-attachments/assets/c2cbb385-d6fa-4acf-a2b1-7303c329fd66" />
+<p align="center">An example video + path playing with overlay mode!</p>
+
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/62702bf8-1dd6-4390-ad40-14286bf1e9ce" />
+<p align="center">Video + Theater mode (doesn't block the screen at all)!</p>
+
+<img width="2559" height="1440" alt="image" src="https://github.com/user-attachments/assets/30937406-89c0-43cc-8e23-169a47f4da2a" />
+<p align="center">Settings menu!</p>
+
+<img width="859" height="1418" alt="image" src="https://github.com/user-attachments/assets/5f8f6439-1347-47eb-a817-2ed22bf51099" />
+<p align="center">Manager's "add video" panel!</p>
+
 ## Getting Started
 
 See [Installation](https://github.com/Alunacoz/BounceX-Viewer/wiki/Installation) to get started!
