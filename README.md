@@ -63,7 +63,6 @@ Another known issue is that **large** .zips (import and export) may appear to fr
 ## Future Updates
 
 There's a lot to be done! The top of the list are features that I'm closer to finishing, and the bottom means it's low priority/very difficult.
-- In settings, create universal offset (to deal with delay in headphones? Need feedback on if this is actually necessary since every other site would have this problem too, no?)
 - OSSM/Other Machine support (I don't have any, so it's kinda hard to work on... I'm looking into [Buttplug.io](https://buttplug.io/) specifically though)
 
 ## Credits
