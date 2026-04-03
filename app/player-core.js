@@ -32,16 +32,28 @@ const _loadedFonts = new Set()
 async function loadEffectFonts(effects, videoFolder) {
   const EXTS = ['woff2', 'woff', 'ttf', 'otf']
   const BUILTIN = new Set([
-    'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
-    'Arial', 'Georgia', 'Impact', 'Trebuchet MS', 'Courier New', 'Verdana',
-    'Times New Roman', 'JetBrains Mono', 'Rajdhani',
+    'sans-serif',
+    'serif',
+    'monospace',
+    'cursive',
+    'fantasy',
+    'system-ui',
+    'Arial',
+    'Georgia',
+    'Impact',
+    'Trebuchet MS',
+    'Courier New',
+    'Verdana',
+    'Times New Roman',
+    'JetBrains Mono',
+    'Rajdhani',
   ])
 
   const needed = new Set(
     effects
-      .filter(ef => ef.type === 'text' && ef.font)
-      .map(ef => ef.font)
-      .filter(name => !BUILTIN.has(name) && !_loadedFonts.has(name))
+      .filter((ef) => ef.type === 'text' && ef.font)
+      .map((ef) => ef.font)
+      .filter((name) => !BUILTIN.has(name) && !_loadedFonts.has(name)),
   )
 
   for (const name of needed) {
@@ -243,7 +255,12 @@ function hexToRgba(hex, alpha) {
 function buildColors(userSettings) {
   const def = (v, d) => (v != null && v !== '' ? v : d)
   return {
-    bgSolid: '#0a0b0f',
+    bgSolid:
+      (userSettings.bgColor && hexToRgba(userSettings.bgColor, 0.92)) ||
+      '#0a0b0f',
+    bgOverlay:
+      (userSettings.bgColor && hexToRgba(userSettings.bgColor, 0.45)) ||
+      'rgba(0,0,0,0.45)',
     topLine:
       (userSettings.topLineInactive &&
         hexToRgba(userSettings.topLineInactive, 0.15)) ||
@@ -264,17 +281,19 @@ function buildColors(userSettings) {
 function getEffectFadeAlpha(ef, frame) {
   if (frame < ef.startFrame || frame > ef.endFrame) return 0
   const dur = ef.endFrame - ef.startFrame
-  const el  = frame - ef.startFrame
+  const el = frame - ef.startFrame
   let alpha = 1.0
-  const fi = ef.fadeIn  ?? 0
+  const fi = ef.fadeIn ?? 0
   const fo = ef.fadeOut ?? 0
-  if (fi > 0 && el < fi)            alpha = Math.min(alpha, el / fi)
-  if (fo > 0 && el > dur - fo)      alpha = Math.min(alpha, (dur - el) / fo)
+  if (fi > 0 && el < fi) alpha = Math.min(alpha, el / fi)
+  if (fo > 0 && el > dur - fo) alpha = Math.min(alpha, (dur - el) / fo)
   return Math.max(0, Math.min(1, alpha))
 }
 
 function hexToRgbArr(hex) {
-  const h = String(hex || '#888888').replace('#', '').padEnd(6, '0')
+  const h = String(hex || '#888888')
+    .replace('#', '')
+    .padEnd(6, '0')
   const n = parseInt(h, 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
@@ -287,18 +306,33 @@ function lerpRgbArr(a, b, t) {
   ]
 }
 
-function getEffectiveColorRgb(effects, frame, basePathHex, baseBallHex, settings) {
+function getEffectiveColorRgb(
+  effects,
+  frame,
+  basePathHex,
+  baseBallHex,
+  settings,
+  baseBgHex,
+) {
   let pathRgb = hexToRgbArr(basePathHex)
   let ballRgb = hexToRgbArr(baseBallHex)
-  if (settings && settings.effectsColorEnabled === false) return { pathRgb, ballRgb }
+  let bgRgb = null
+  if (settings && settings.effectsColorEnabled === false)
+    return { pathRgb, ballRgb, bgRgb }
   for (const ef of effects) {
     if (ef.type !== 'pathColor') continue
     const alpha = getEffectFadeAlpha(ef, frame)
     if (alpha <= 0) continue
-    if (ef.pathColor) pathRgb = lerpRgbArr(pathRgb, hexToRgbArr(ef.pathColor), alpha)
-    if (ef.ballColor) ballRgb = lerpRgbArr(ballRgb, hexToRgbArr(ef.ballColor), alpha)
+    if (ef.pathColor)
+      pathRgb = lerpRgbArr(pathRgb, hexToRgbArr(ef.pathColor), alpha)
+    if (ef.ballColor)
+      ballRgb = lerpRgbArr(ballRgb, hexToRgbArr(ef.ballColor), alpha)
+    if (ef.bgColor) {
+      const base = bgRgb || hexToRgbArr(baseBgHex || '#0a0b0f')
+      bgRgb = lerpRgbArr(base, hexToRgbArr(ef.bgColor), alpha)
+    }
   }
-  return { pathRgb, ballRgb }
+  return { pathRgb, ballRgb, bgRgb }
 }
 
 // ── HTML Builders ────────────────────────────────────────────────────────────
@@ -502,7 +536,7 @@ function buildControlsHTML({
 //   onProgress()             called on progress/loadedmetadata (update load bar)
 //
 // Returned API:
-//   loadBxData(path, totalFrames, effects)  swap in new path data + bx2 effects
+//   loadBxData(path, totalFrames, effects, peaks)  swap in new path data + bx2 effects + DH peak frames
 //   resetSmoothTime()              reset smooth-time to 0 (playlist: each track)
 //   resizeCanvas()                 force a canvas resize (playlist: after loadTrack)
 //   setOffset(secs)                update path start offset in seconds
@@ -550,8 +584,9 @@ function createPlayerEngine(opts) {
   const COLORS = buildColors(userSettings)
 
   // Mutable state
-  let activePath    = null
-  let activeEffects = []   // bx2 effects array for the current path
+  let activePath = null
+  let activeEffects = [] // bx2 effects array for the current path
+  let activePeaks = [] // frame numbers of peak markers (for DH mode)
   let totalFrames = 14400
   let smoothTime = 0
   let lastRafTime = null
@@ -644,7 +679,10 @@ function createPlayerEngine(opts) {
 
     ctx.clearRect(0, 0, W, H)
 
-    const curFrameExact = Math.min((smoothTime - offsetSecs) * FPS, totalFrames - 1)
+    const curFrameExact = Math.min(
+      (smoothTime - offsetSecs) * FPS,
+      totalFrames - 1,
+    )
     const curFrame = Math.floor(curFrameExact)
     const frac = curFrameExact - curFrame
     const ballX = W / 2
@@ -662,22 +700,14 @@ function createPlayerEngine(opts) {
       bottomY = H - BALL_MARGIN
     }
 
-    // Background
-    if (!isOverlay) {
-      ctx.fillStyle = COLORS.bgSolid
-      ctx.fillRect(0, 0, W, H)
-    } else if (overlayBg) {
-      ctx.fillStyle = 'rgba(0,0,0,0.45)'
-      ctx.fillRect(0, topY, W, H - topY)
-    }
-
     // Clip so nothing renders within EDGE_PAD of the canvas edges
     ctx.save()
     ctx.beginPath()
     ctx.rect(0, EDGE_PAD, W, isOverlay ? H - EDGE_PAD : H - EDGE_PAD * 2)
     ctx.clip()
 
-    const depthA = curFrame >= 0 && activePath[curFrame] >= 0 ? activePath[curFrame] : 0
+    const depthA =
+      curFrame >= 0 && activePath[curFrame] >= 0 ? activePath[curFrame] : 0
     const depthB =
       curFrame >= 0
         ? activePath[Math.min(curFrame + 1, totalFrames - 1)] >= 0
@@ -689,15 +719,17 @@ function createPlayerEngine(opts) {
     const ballY = bottomY + displayDepth * (topY - bottomY)
     const isNearTop = flipY ? curDepth <= 0.01 : curDepth >= 0.99
     const isNearBottom = flipY ? curDepth >= 0.99 : curDepth <= 0.01
+    const isDH = userSettings.dhMode === true
 
     // Boundary lines
     ctx.lineWidth = 1
-    ctx.strokeStyle = isNearTop ? COLORS.topActive : COLORS.topLine
+    ctx.strokeStyle = !isDH && isNearTop ? COLORS.topActive : COLORS.topLine
     ctx.beginPath()
     ctx.moveTo(0, topY)
     ctx.lineTo(W, topY)
     ctx.stroke()
-    ctx.strokeStyle = isNearBottom ? COLORS.bottomActive : COLORS.bottomLine
+    ctx.strokeStyle =
+      !isDH && isNearBottom ? COLORS.bottomActive : COLORS.bottomLine
     ctx.beginPath()
     ctx.moveTo(0, bottomY)
     ctx.lineTo(W, bottomY)
@@ -741,67 +773,156 @@ function createPlayerEngine(opts) {
     }
     function viewerFrameToX(f) {
       if (viewerXCache.has(f)) return viewerXCache.get(f)
-      const fl = Math.floor(f), fr = Math.ceil(f)
-      const xl = viewerXCache.get(fl) ?? (ballX + (fl - curFrameExact) * basePixPerFrame)
-      const xr = viewerXCache.get(fr) ?? (ballX + (fr - curFrameExact) * basePixPerFrame)
+      const fl = Math.floor(f),
+        fr = Math.ceil(f)
+      const xl =
+        viewerXCache.get(fl) ?? ballX + (fl - curFrameExact) * basePixPerFrame
+      const xr =
+        viewerXCache.get(fr) ?? ballX + (fr - curFrameExact) * basePixPerFrame
       return xl + (xr - xl) * (f - fl)
     }
 
     const startFrame = vMinF
-    const endFrame   = vMaxF
+    const endFrame = vMaxF
 
-    const { pathRgb, ballRgb } = getEffectiveColorRgb(
-      activeEffects, curFrameExact, COLORS.pathColor, COLORS.ball, userSettings
+    const { pathRgb, ballRgb, bgRgb } = getEffectiveColorRgb(
+      activeEffects,
+      curFrameExact,
+      COLORS.pathColor,
+      COLORS.ball,
+      userSettings,
+      userSettings.bgColor || '#0a0b0f',
     )
     const [pr, pg, pb] = pathRgb
-    const pathGrad = ctx.createLinearGradient(0, 0, W, 0)
-    pathGrad.addColorStop(0, `rgba(${pr},${pg},${pb},0)`)
-    pathGrad.addColorStop(0.15, `rgba(${pr},${pg},${pb},0.6)`)
-    pathGrad.addColorStop(0.45, `rgba(${pr},${pg},${pb},1)`)
-    pathGrad.addColorStop(0.55, `rgba(${pr},${pg},${pb},1)`)
-    pathGrad.addColorStop(0.85, `rgba(${pr},${pg},${pb},0.6)`)
-    pathGrad.addColorStop(1, `rgba(${pr},${pg},${pb},0)`)
 
-    ctx.strokeStyle = pathGrad
-    ctx.lineWidth = 2.5
-    ctx.lineJoin = 'round'
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    let pathStarted = false
-    for (let f = startFrame; f <= endFrame; f++) {
-      const d = activePath[f]
-      if (d < 0) continue
-      const x = viewerFrameToX(f)
-      const displayD = flipY ? 1 - d : d
-      const y = bottomY + displayD * (topY - bottomY)
-      if (!pathStarted) {
-        ctx.moveTo(x, y)
-        pathStarted = true
-      } else ctx.lineTo(x, y)
+    // Background — use effect bgColor if active, else user setting
+    const bgAlpha = userSettings.bgTransparent !== false ? 0.45 : 1.0
+    if (!isOverlay) {
+      const [bgR, bgG, bgB] =
+        bgRgb || hexToRgbArr(userSettings.bgColor || '#0a0b0f')
+      ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},${bgAlpha})`
+      ctx.fillRect(0, 0, W, H)
+    } else if (overlayBg) {
+      const [bgR, bgG, bgB] =
+        bgRgb || hexToRgbArr(userSettings.bgColor || '#0a0b0f')
+      ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},0.45)`
+      ctx.fillRect(0, topY, W, H - topY)
     }
-    if (pathStarted) ctx.stroke()
 
-    // Ball glow
-    const glowGrad = ctx.createRadialGradient(
-      ballX,
-      ballY,
-      0,
-      ballX,
-      ballY,
-      BALL_R * 3,
-    )
-    glowGrad.addColorStop(0, 'rgba(255,255,255,0.35)')
-    glowGrad.addColorStop(1, 'rgba(255,255,255,0)')
-    ctx.beginPath()
-    ctx.arc(ballX, ballY, BALL_R * 3, 0, Math.PI * 2)
-    ctx.fillStyle = glowGrad
-    ctx.fill()
+    // ── DH Mode ─────────────────────────────────────────────────────────────────
+    if (isDH) {
+      const midY = (topY + bottomY) / 2
+      const circleR = Math.max(BALL_R + 3, (bottomY - topY) * 0.13)
 
-    // Ball
-    ctx.beginPath()
-    ctx.arc(ballX, ballY, BALL_R, 0, Math.PI * 2)
-    ctx.fillStyle = `rgb(${ballRgb[0]},${ballRgb[1]},${ballRgb[2]})`
-    ctx.fill()
+      // Vertical hit line at center
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)'
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([4, 5])
+      ctx.beginPath()
+      ctx.moveTo(ballX, topY + 2)
+      ctx.lineTo(ballX, bottomY - 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Static hit ring at center
+      ctx.beginPath()
+      ctx.arc(ballX, midY, circleR, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Scrolling peak circles
+      for (const pf of activePeaks) {
+        const x = viewerFrameToX(pf)
+        if (x < -circleR * 4 || x > W + circleR * 4) continue
+
+        const dist = Math.abs(x - ballX)
+        const hitFrac = Math.max(0, 1 - dist / (circleR * 5))
+
+        // Glow halo when near hit line
+        if (hitFrac > 0) {
+          const glow = ctx.createRadialGradient(
+            x,
+            midY,
+            0,
+            x,
+            midY,
+            circleR * 3.5,
+          )
+          glow.addColorStop(0, `rgba(${pr},${pg},${pb},${0.32 * hitFrac})`)
+          glow.addColorStop(1, `rgba(${pr},${pg},${pb},0)`)
+          ctx.beginPath()
+          ctx.arc(x, midY, circleR * 3.5, 0, Math.PI * 2)
+          ctx.fillStyle = glow
+          ctx.fill()
+        }
+
+        // Fill circle progressively as it approaches hit line
+        if (hitFrac > 0.4) {
+          ctx.beginPath()
+          ctx.arc(x, midY, circleR, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(${pr},${pg},${pb},${((hitFrac - 0.4) / 0.6) * 0.85})`
+          ctx.fill()
+        }
+
+        // Circle outline — brighter when near
+        ctx.beginPath()
+        ctx.arc(x, midY, circleR, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(${pr},${pg},${pb},${0.45 + hitFrac * 0.55})`
+        ctx.lineWidth = 2.5
+        ctx.stroke()
+      }
+    } else {
+      // ── Normal waveform ──────────────────────────────────────────────────────────
+      const pathGrad = ctx.createLinearGradient(0, 0, W, 0)
+      pathGrad.addColorStop(0, `rgba(${pr},${pg},${pb},0)`)
+      pathGrad.addColorStop(0.15, `rgba(${pr},${pg},${pb},0.6)`)
+      pathGrad.addColorStop(0.45, `rgba(${pr},${pg},${pb},1)`)
+      pathGrad.addColorStop(0.55, `rgba(${pr},${pg},${pb},1)`)
+      pathGrad.addColorStop(0.85, `rgba(${pr},${pg},${pb},0.6)`)
+      pathGrad.addColorStop(1, `rgba(${pr},${pg},${pb},0)`)
+
+      ctx.strokeStyle = pathGrad
+      ctx.lineWidth = 2.5
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      let pathStarted = false
+      for (let f = startFrame; f <= endFrame; f++) {
+        const d = activePath[f]
+        if (d < 0) continue
+        const x = viewerFrameToX(f)
+        const displayD = flipY ? 1 - d : d
+        const y = bottomY + displayD * (topY - bottomY)
+        if (!pathStarted) {
+          ctx.moveTo(x, y)
+          pathStarted = true
+        } else ctx.lineTo(x, y)
+      }
+      if (pathStarted) ctx.stroke()
+
+      // Ball glow
+      const glowGrad = ctx.createRadialGradient(
+        ballX,
+        ballY,
+        0,
+        ballX,
+        ballY,
+        BALL_R * 3,
+      )
+      glowGrad.addColorStop(0, 'rgba(255,255,255,0.35)')
+      glowGrad.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.beginPath()
+      ctx.arc(ballX, ballY, BALL_R * 3, 0, Math.PI * 2)
+      ctx.fillStyle = glowGrad
+      ctx.fill()
+
+      // Ball
+      ctx.beginPath()
+      ctx.arc(ballX, ballY, BALL_R, 0, Math.PI * 2)
+      ctx.fillStyle = `rgb(${ballRgb[0]},${ballRgb[1]},${ballRgb[2]})`
+      ctx.fill()
+    } // end normal waveform / DH mode branch
 
     // Playhead line (outside clip, spans full height)
     ctx.restore()
@@ -818,40 +939,53 @@ function createPlayerEngine(opts) {
     if (userSettings.effectsTextEnabled !== false) {
       for (const ef of activeEffects) {
         if (ef.type !== 'text') continue
-        const fadeAlpha = getEffectFadeAlpha(ef, curFrameExact) * (ef.opacity ?? 1)
+        const fadeAlpha =
+          getEffectFadeAlpha(ef, curFrameExact) * (ef.opacity ?? 1)
         if (fadeAlpha <= 0) continue
-        const fontFamily = ef.font || 'JetBrains Mono'
+        const fontFamily = ef.font || 'sans-serif'
         // pathAreaH = bottomY - topY; font scales with it so overlay/zoom work
         const pathAreaH = bottomY - topY
-        let actualFontSize = Math.max(4, Math.round((ef.fontSize || 50) / 100 * pathAreaH))
+        let actualFontSize = Math.max(
+          4,
+          Math.round(((ef.fontSize || 50) / 100) * pathAreaH),
+        )
         const tx = W * ((ef.posX ?? 50) / 100)
         const ty = topY + pathAreaH * ((ef.posY ?? 50) / 100)
         ctx.save()
-        ctx.globalAlpha  = fadeAlpha
-        ctx.textAlign    = 'center'
+        ctx.globalAlpha = fadeAlpha
+        ctx.textAlign = 'center'
         ctx.textBaseline = 'alphabetic'
-        ctx.fillStyle    = ef.color || '#ffffff'
-        ctx.shadowColor  = 'rgba(0,0,0,0.8)'
+        ctx.fillStyle = ef.color || '#ffffff'
+        ctx.shadowColor = 'rgba(0,0,0,0.8)'
 
         const lines = String(ef.text || '').split('\n')
-        const maxAllowedW = W * 0.92   // 4% margin each side
+        const maxAllowedW = W * 0.92 // 4% margin each side
 
         // Measure at nominal size, shrink font if widest line overflows
         ctx.font = `${actualFontSize}px '${fontFamily}', 'JetBrains Mono', sans-serif`
-        const widestLine = lines.reduce((max, l) => Math.max(max, ctx.measureText(l).width), 0)
+        const widestLine = lines.reduce(
+          (max, l) => Math.max(max, ctx.measureText(l).width),
+          0,
+        )
         if (widestLine > maxAllowedW) {
-          actualFontSize = Math.max(4, Math.floor(actualFontSize * maxAllowedW / widestLine))
+          actualFontSize = Math.max(
+            4,
+            Math.floor((actualFontSize * maxAllowedW) / widestLine),
+          )
           ctx.font = `${actualFontSize}px '${fontFamily}', 'JetBrains Mono', sans-serif`
         }
 
-        ctx.shadowBlur   = Math.max(2, Math.ceil(actualFontSize / 10))
+        ctx.shadowBlur = Math.max(2, Math.ceil(actualFontSize / 10))
         // Use actual glyph metrics for precise vertical centering
         const m = ctx.measureText('Ag')
-        const vAsc  = m.actualBoundingBoxAscent  ?? actualFontSize * 0.72
+        const vAsc = m.actualBoundingBoxAscent ?? actualFontSize * 0.72
         const vDesc = m.actualBoundingBoxDescent ?? actualFontSize * 0.18
         const baselineAdjust = vAsc - (vAsc + vDesc) / 2
         const lineH = actualFontSize * 1.25
-        const strokeW = (ef.strokeWidth || 0) > 0 ? (ef.strokeWidth / 100) * actualFontSize * 2 : 0
+        const strokeW =
+          (ef.strokeWidth || 0) > 0
+            ? (ef.strokeWidth / 100) * actualFontSize * 2
+            : 0
         lines.forEach((line, li) => {
           const lineCenterY = ty + (li - (lines.length - 1) / 2) * lineH
           if (strokeW > 0) {
@@ -1204,10 +1338,31 @@ function createPlayerEngine(opts) {
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
     /** Swap in new bx path data (used by playlist on each track change). */
-    loadBxData(path, frames, effects = []) {
-      activePath    = path
-      totalFrames   = frames
+    loadBxData(path, frames, effects = [], peaks = []) {
+      activePath = path
+      totalFrames = frames
       activeEffects = Array.isArray(effects) ? effects : []
+
+      // If peaks were explicitly provided, use them. Otherwise auto-derive from
+      // the path by finding local extrema (bounce points where direction reverses).
+      if (Array.isArray(peaks) && peaks.length > 0) {
+        activePeaks = peaks
+      } else if (path && path.length > 0) {
+        const derived = []
+        let prevDir = 0
+        for (let f = 1; f < path.length - 1; f++) {
+          if (path[f] < 0 || path[f - 1] < 0) {
+            prevDir = 0
+            continue
+          }
+          const dir = Math.sign(path[f] - path[f - 1])
+          if (dir !== 0 && prevDir !== 0 && dir !== prevDir) derived.push(f)
+          if (dir !== 0) prevDir = dir
+        }
+        activePeaks = derived
+      } else {
+        activePeaks = []
+      }
     },
     /** Reset smooth-time interpolation (used by playlist on each track change). */
     resetSmoothTime() {

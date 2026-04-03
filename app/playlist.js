@@ -12,6 +12,20 @@
 
 const PLAYLIST_BASE = 'playlists'
 
+/** Compute peak marker frames — markers where depth > both neighbours. */
+function findPeaks(sortedMarkers) {
+  const peaks = []
+  for (let i = 1; i < sortedMarkers.length - 1; i++) {
+    if (
+      sortedMarkers[i].depth > sortedMarkers[i - 1].depth &&
+      sortedMarkers[i].depth > sortedMarkers[i + 1].depth
+    ) {
+      peaks.push(sortedMarkers[i].frame)
+    }
+  }
+  return peaks
+}
+
 const playlistParams = new URLSearchParams(window.location.search)
 const playlistId = playlistParams.get('p')
 
@@ -90,9 +104,10 @@ function buildPlaylistHTML(playlist, metas) {
       const thumbSrc = m.thumbnail
         ? `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(m.thumbnail)}`
         : null
-      const timecode = m.durationSecs != null
-        ? framesToTimecode(Math.round(m.durationSecs * 60))
-        : framesToTimecode(m.duration || 0)
+      const timecode =
+        m.durationSecs != null
+          ? framesToTimecode(Math.round(m.durationSecs * 60))
+          : framesToTimecode(m.duration || 0)
       return `
       <div class="playlist-track-item" id="ptrack-${i}" data-index="${i}">
         <div class="ptrack-num">${i + 1}</div>
@@ -231,9 +246,11 @@ function setupPlaylistPlayer(playlist, metas) {
 
     let newPath
     let newEffects = []
-    let newTotalFrames = meta.durationSecs != null
-      ? Math.round(meta.durationSecs * 60)
-      : (meta.duration || 14400)
+    let newPeaks = []
+    let newTotalFrames =
+      meta.durationSecs != null
+        ? Math.round(meta.durationSecs * 60)
+        : meta.duration || 14400
     try {
       const bxRaw = await fetchText(
         `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(bxFileToLoad)}`,
@@ -241,16 +258,25 @@ function setupPlaylistPlayer(playlist, metas) {
       const parsedBx = JSON.parse(bxRaw)
       const isBx2 = parsedBx.version === 2 || parsedBx.meta?.version === 2
       const markerData = isBx2 ? parsedBx.markers : parsedBx
-      const bxEffects  = isBx2 && Array.isArray(parsedBx.effects) ? parsedBx.effects : []
+      const bxEffects =
+        isBx2 && Array.isArray(parsedBx.effects) ? parsedBx.effects : []
       newPath = buildPath(markerData, newTotalFrames)
       newEffects = bxEffects
       await loadEffectFonts(bxEffects, folder)
+      newPeaks = findPeaks(
+        Object.entries(markerData)
+          .map(([k, v]) => ({
+            frame: parseInt(k),
+            depth: parseFloat(v[0]) || 0,
+          }))
+          .sort((a, b) => a.frame - b.frame),
+      )
     } catch (e) {
       console.warn('Could not load bx file:', e)
       newPath = new Float32Array(newTotalFrames).fill(0)
     }
 
-    engine.loadBxData(newPath, newTotalFrames, newEffects)
+    engine.loadBxData(newPath, newTotalFrames, newEffects, newPeaks)
     engine.setOffset(typeof meta.offset === 'number' ? meta.offset : 0)
     engine.resetSmoothTime()
 
@@ -273,10 +299,27 @@ function setupPlaylistPlayer(playlist, metas) {
                 `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(b.file)}`,
               )
               const parsedSel = JSON.parse(rawSel)
-              const isBx2Sel  = parsedSel.version === 2 || parsedSel.meta?.version === 2
-              const dataSel   = isBx2Sel ? parsedSel.markers : parsedSel
-              const effSel    = isBx2Sel && Array.isArray(parsedSel.effects) ? parsedSel.effects : []
-              engine.loadBxData(buildPath(dataSel, newTotalFrames), newTotalFrames, effSel)
+              const isBx2Sel =
+                parsedSel.version === 2 || parsedSel.meta?.version === 2
+              const dataSel = isBx2Sel ? parsedSel.markers : parsedSel
+              const effSel =
+                isBx2Sel && Array.isArray(parsedSel.effects)
+                  ? parsedSel.effects
+                  : []
+              const peaksSel = findPeaks(
+                Object.entries(dataSel)
+                  .map(([k, v]) => ({
+                    frame: parseInt(k),
+                    depth: parseFloat(v[0]) || 0,
+                  }))
+                  .sort((a, b) => a.frame - b.frame),
+              )
+              engine.loadBxData(
+                buildPath(dataSel, newTotalFrames),
+                newTotalFrames,
+                effSel,
+                peaksSel,
+              )
             } catch (err) {
               console.warn('Could not load bx file:', err)
             }

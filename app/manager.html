@@ -1412,6 +1412,20 @@
       }
       .pkg-drop-clear:hover { color: var(--red); background: rgba(232,85,85,0.1); }
 
+      /* ── Thumbnail preview inside drop zone ── */
+      .pkg-drop-preview {
+        display: none;
+        width: 100%;
+        max-height: 160px;
+        object-fit: contain;
+        border-radius: calc(var(--radius) - 2px);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .pkg-drop-zone.has-file .pkg-drop-preview[src]:not([src=""]) {
+        display: block;
+      }
+
       /* ── BX files ── */
       .pkg-bx-list {
         display: flex;
@@ -2111,6 +2125,7 @@
                 </div>
                 <div class="pkg-drop-zone" id="thumbDropZone" onclick="document.getElementById('thumbFileInput').click()">
                   <input type="file" id="thumbFileInput" accept=".jpg,.jpeg,.png,.webp,.gif" style="display:none">
+                  <img class="pkg-drop-preview" id="thumbDropPreview" alt="">
                   <div class="pkg-drop-icon">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   </div>
@@ -2376,6 +2391,7 @@
               <div class="pkg-section-title">Thumbnail <span style="font-size:0.6rem;text-transform:none;letter-spacing:0;opacity:0.6">optional</span></div>
               <div class="pkg-drop-zone" id="plThumbDropZone" onclick="document.getElementById('plThumbFileInput').click()">
                 <input type="file" id="plThumbFileInput" accept=".jpg,.jpeg,.png,.webp,.gif" style="display:none">
+                <img class="pkg-drop-preview" id="plThumbDropPreview" alt="">
                 <div class="pkg-drop-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 </div>
@@ -2444,7 +2460,8 @@
     </div>
 
     <script>
-      let API = ''  // Set dynamically from config
+      let API = ''       // manager server base URL
+      let SITE_URL = ''  // main HTTP server base URL (for thumbnails/videos)
       let toastTimer = null
 
       // Load config from manager server and set up dynamic URLs
@@ -2452,14 +2469,16 @@
         try {
           const res = await fetch('/manager-api/config', { cache: 'no-store' })
           const cfg = await res.json()
-          API = 'http://' + location.hostname + ':' + cfg.managerPort
-          const mainUrl = 'http://' + location.hostname + ':' + cfg.httpPort
+          API      = 'http://' + location.hostname + ':' + cfg.managerPort
+          SITE_URL = 'http://' + location.hostname + ':' + cfg.httpPort
+          const mainUrl = SITE_URL
           document.querySelectorAll('[data-main-page]').forEach(a => {
             a.href = mainUrl + '/' + a.dataset.mainPage
           })
         } catch {
-          // Fallback: assume same origin for API
-          API = location.origin
+          // Fallback: assume same origin for API and site
+          API      = location.origin
+          SITE_URL = location.origin
         }
       })()
 
@@ -3247,7 +3266,8 @@
           // Pre-fill thumbnail drop zone
           if (meta.thumbnail) {
             _pkgExistingThumbFile = meta.thumbnail
-            setDropZoneFilled('thumbDropZone', 'thumbDropLabel', 'thumbDropHint', 'thumbDropFilename', meta.thumbnail)
+            const existingThumbUrl = `${SITE_URL}/videos/${encodeURIComponent(id)}/${encodeURIComponent(meta.thumbnail)}`
+            setDropZoneFilled('thumbDropZone', 'thumbDropLabel', 'thumbDropHint', 'thumbDropFilename', meta.thumbnail, existingThumbUrl)
             const hint = document.getElementById('thumbDropHint')
             hint.textContent = 'Drop a new file to replace · click to browse'
             hint.style.display = ''
@@ -3391,9 +3411,12 @@
         document.getElementById(hintId).style.display = ''
         document.getElementById(filenameId).style.display = 'none'
         document.getElementById(filenameId).textContent = ''
+        const prev = zone.querySelector('.pkg-drop-preview')
+        if (prev) prev.src = ''
+        zone.querySelector('.pkg-drop-preview-img')?.remove()
       }
 
-      function setDropZoneFilled(zoneId, labelId, hintId, filenameId, filename) {
+      function setDropZoneFilled(zoneId, labelId, hintId, filenameId, filename, previewUrl = null) {
         const zone = document.getElementById(zoneId)
         zone.classList.add('has-file')
         document.getElementById(labelId).style.display = 'none'
@@ -3401,6 +3424,17 @@
         const fn = document.getElementById(filenameId)
         fn.style.display = ''
         fn.textContent = filename
+        // Update the dedicated preview <img> if this zone has one
+        const prev = zone.querySelector('.pkg-drop-preview')
+        if (prev) {
+          if (previewUrl) {
+            prev.src = previewUrl
+          } else {
+            prev.src = ''
+          }
+        }
+        // Remove any old injected background preview from the previous approach
+        zone.querySelector('.pkg-drop-preview-img')?.remove()
       }
 
       // ── Video file ────────────────────────────────────────────────────────
@@ -3452,7 +3486,8 @@
 
       function setThumbFile(f) {
         _pkgThumbFile = f
-        setDropZoneFilled('thumbDropZone', 'thumbDropLabel', 'thumbDropHint', 'thumbDropFilename', f.name)
+        const previewUrl = URL.createObjectURL(f)
+        setDropZoneFilled('thumbDropZone', 'thumbDropLabel', 'thumbDropHint', 'thumbDropFilename', f.name, previewUrl)
       }
 
       function clearThumbFile(e) {
@@ -4070,7 +4105,8 @@
 
           if (meta.thumbnail) {
             _plExistingThumb = meta.thumbnail
-            setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', meta.thumbnail)
+            const existingPlThumbUrl = `${SITE_URL}/playlists/${encodeURIComponent(id)}/${encodeURIComponent(meta.thumbnail)}`
+            setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', meta.thumbnail, existingPlThumbUrl)
             document.getElementById('plThumbDropHint').textContent = 'Drop a new file to replace · click to browse'
             document.getElementById('plThumbDropHint').style.display = ''
           }
@@ -4138,7 +4174,8 @@
 
       function _setPlThumb(f) {
         _plThumbFile = f
-        setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', f.name)
+        const previewUrl = URL.createObjectURL(f)
+        setDropZoneFilled('plThumbDropZone', 'plThumbDropLabel', 'plThumbDropHint', 'plThumbDropFilename', f.name, previewUrl)
       }
 
       function clearPlThumbFile(e) {
@@ -4182,7 +4219,7 @@
           const div = document.createElement('div')
           div.className = 'pl-pool-item' + (isAdded ? ' added' : '')
           div.dataset.id = v._folder
-          const thumbUrl = v.thumbnail ? `videos/${encodeURIComponent(v._folder)}/${encodeURIComponent(v.thumbnail)}` : null
+          const thumbUrl = v.thumbnail ? `${SITE_URL}/videos/${encodeURIComponent(v._folder)}/${encodeURIComponent(v.thumbnail)}` : null
           div.innerHTML = `
             <div class="pl-pool-thumb">${thumbUrl ? `<img src="${thumbUrl}" onerror="this.style.display='none'">` : ''}</div>
             <span class="pl-pool-title">${esc(v.title || v._folder)}</span>
@@ -4515,8 +4552,8 @@
           const title = item.title || id
           const thumbUrl = item.thumbnail
             ? (isVideo
-                ? `videos/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`
-                : `playlists/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`)
+                ? `${SITE_URL}/videos/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`
+                : `${SITE_URL}/playlists/${encodeURIComponent(id)}/${encodeURIComponent(item.thumbnail)}`)
             : null
           const isSelected = sel.has(id)
 
