@@ -21,6 +21,45 @@ const EDGE_PAD = 8
 const BX_HEIGHT_BELOW = 100 // px height when not in overlay mode (reference)
 const BX_HEIGHT_OVERLAY = 200 // px height when in overlay mode
 
+// ── Custom font loader ────────────────────────────────────────────────────────
+//
+// Collects all unique font names from text effects, then tries to load each
+// one from the video's own folder. Tried extensions: woff2, woff, ttf, otf.
+// Silently skips fonts that are already loaded or whose file isn't found.
+
+const _loadedFonts = new Set()
+
+async function loadEffectFonts(effects, videoFolder) {
+  const EXTS = ['woff2', 'woff', 'ttf', 'otf']
+  const BUILTIN = new Set([
+    'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
+    'Arial', 'Georgia', 'Impact', 'Trebuchet MS', 'Courier New', 'Verdana',
+    'Times New Roman', 'JetBrains Mono', 'Rajdhani',
+  ])
+
+  const needed = new Set(
+    effects
+      .filter(ef => ef.type === 'text' && ef.font)
+      .map(ef => ef.font)
+      .filter(name => !BUILTIN.has(name) && !_loadedFonts.has(name))
+  )
+
+  for (const name of needed) {
+    for (const ext of EXTS) {
+      const url = `${VIDEO_BASE}/${encodeURIComponent(videoFolder)}/${encodeURIComponent(name)}.${ext}`
+      try {
+        const face = new FontFace(name, `url('${url}')`)
+        await face.load()
+        document.fonts.add(face)
+        _loadedFonts.add(name)
+        break
+      } catch {
+        // file not found or failed to parse — try next extension
+      }
+    }
+  }
+}
+
 // ── Godot 4 Tween Easing ─────────────────────────────────────────────────────
 // TransitionType: 0=Linear 1=Sine 2=Quint 3=Quart 4=Quad 5=Expo
 //                 6=Elastic 7=Cubic 8=Circ 9=Bounce 10=Back 11=Spring
