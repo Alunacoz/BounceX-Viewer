@@ -541,6 +541,15 @@ def api_create_video(handler):
         if bx_files_meta:
             meta['bxFiles'] = bx_files_meta
 
+        # Font files — sent as font_0, font_1, …
+        fidx = 0
+        while f'font_{fidx}' in files:
+            font_filename, font_bytes = files[f'font_{fidx}']
+            if font_filename and font_bytes:
+                with open(folder_path / font_filename, 'wb') as f:
+                    f.write(font_bytes)
+            fidx += 1
+
         # Write meta.json
         write_json(folder_path / 'meta.json', meta)
 
@@ -659,6 +668,15 @@ def api_update_video(handler, folder_id: str):
                         bx_files_meta.append({"label": label, "file": existing_name})
             if bx_files_meta:
                 meta['bxFiles'] = bx_files_meta
+
+        # Font files — new uploads only; existing font files are left in place
+        fidx = 0
+        while f'font_{fidx}' in files:
+            font_filename, font_bytes = files[f'font_{fidx}']
+            if font_filename and font_bytes:
+                with open(folder_path / font_filename, 'wb') as f:
+                    f.write(font_bytes)
+            fidx += 1
 
         # Write meta.json
         write_json(folder_path / 'meta.json', meta)

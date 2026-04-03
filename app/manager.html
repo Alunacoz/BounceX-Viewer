@@ -2148,6 +2148,15 @@
             </button>
           </div>
 
+          <!-- Custom Fonts (shown only when bx files reference custom fonts) -->
+          <div id="pkgFontSection" style="display:none">
+            <div class="pkg-section-title">
+              Custom Fonts
+              <span class="optional-badge" style="text-transform:none;letter-spacing:0;margin-left:4px">optional — falls back to JetBrains Mono</span>
+            </div>
+            <div class="pkg-bx-list" id="fontFileList"></div>
+          </div>
+
           <!-- Identity section -->
           <div>
             <div class="pkg-section-title">Package Identity</div>
@@ -3182,8 +3191,11 @@
       let _pkgDurationSecs = null
       let _pkgEditMode = false
       let _pkgEditId = null
-      let _pkgExistingVideoFile = null   // filename string when editing
-      let _pkgExistingThumbFile = null   // filename string when editing
+      let _pkgExistingVideoFile = null
+      let _pkgExistingThumbFile = null
+      // Font name → {file: File|null, existingFile: string|null}
+      // Populated when a .bx file containing text effects is added
+      let _pkgFonts = new Map()
 
       function openCreatePkg() {
         resetCreatePkg(false)
@@ -3306,6 +3318,27 @@
             addBxEntry()
           }
 
+          // For existing bx files, fetch them to extract font references
+          await Promise.all(bxFiles.map(async (bx, i) => {
+            try {
+              const url = `${API}/manager-api/videos/${encodeURIComponent(id)}/meta`
+              // We already have meta — just fetch the bx file directly from the site
+              const bxUrl = `${SITE_URL}/videos/${encodeURIComponent(id)}/${encodeURIComponent(bx.file)}`
+              const r = await fetch(bxUrl, { cache: 'no-store' })
+              if (!r.ok) return
+              const parsed = await r.json()
+              if (_bxEntries[i]) _bxEntries[i]._parsedFonts = _extractFontsFromBx(parsed)
+            } catch { /* bx file unreadable — skip font detection */ }
+          }))
+
+          // Pre-fill any existing font files in the video folder
+          const existingFonts = meta.fonts || []
+          for (const fontFile of existingFonts) {
+            const name = fontFile.replace(/\.(ttf|otf|woff2?)$/i, '')
+            _pkgFonts.set(name, { file: null, existingFile: fontFile })
+          }
+          refreshFontSection()
+
           document.getElementById('createPkgError').textContent = ''
           document.getElementById('createPkgSubmitBtn').disabled = false
           document.getElementById('pkgTitle').focus()
@@ -3333,6 +3366,7 @@
         _pkgEditId = null
         _pkgExistingVideoFile = null
         _pkgExistingThumbFile = null
+        _pkgFonts = new Map()
 
         document.getElementById('pkgTitle').value = ''
         document.getElementById('pkgFolderId').value = ''
@@ -3357,6 +3391,9 @@
         // Reset bx entries
         document.getElementById('bxFileList').innerHTML = ''
         if (!isEdit) addBxEntry()
+        // Reset font section
+        document.getElementById('fontFileList').innerHTML = ''
+        document.getElementById('pkgFontSection').style.display = 'none'
 
         document.getElementById('createPkgError').textContent = ''
         document.getElementById('createPkgProgress').classList.remove('active')
@@ -3537,10 +3574,22 @@
         _bxEntries[idx] = { ..._bxEntries[idx], file: f, existingFile: null }
         const drop = document.getElementById(`bxDrop_${idx}`)
         drop.classList.add('has-file')
-        // Update the icon color to teal now that a file is selected
         const svg = drop.querySelector('svg')
         if (svg) svg.style.color = 'var(--teal)'
         document.getElementById(`bxLabel_${idx}`).textContent = f.name
+
+        // Parse the bx file to find custom fonts referenced in text effects
+        const reader = new FileReader()
+        reader.onload = e => {
+          try {
+            const parsed = JSON.parse(e.target.result)
+            _bxEntries[idx]._parsedFonts = _extractFontsFromBx(parsed)
+          } catch {
+            _bxEntries[idx]._parsedFonts = []
+          }
+          refreshFontSection()
+        }
+        reader.readAsText(f)
       }
 
       function removeBxEntry(idx) {
@@ -3551,6 +3600,112 @@
         // Keep at least one row visible
         const remaining = list.querySelectorAll('.pkg-bx-entry')
         if (remaining.length === 0) addBxEntry()
+        refreshFontSection()
+      }
+
+      // ── Custom font section ──────────────────────────────────────────────────
+
+      const _BUILTIN_FONTS = new Set([
+        'JetBrains Mono', 'Rajdhani', 'Arial', 'Georgia', 'Impact',
+        'Trebuchet MS', 'Courier New', 'Verdana', 'Times New Roman',
+        'sans-serif', 'serif', 'monospace',
+      ])
+
+      function _extractFontsFromBx(parsed) {
+        const isV2 = parsed.version === 2 || parsed.meta?.version === 2
+        const effects = isV2 && Array.isArray(parsed.effects) ? parsed.effects : []
+        return effects
+          .filter(ef => ef.type === 'text' && ef.font && !_BUILTIN_FONTS.has(ef.font))
+          .map(ef => ef.font)
+      }
+
+      function refreshFontSection() {
+        // Collect all custom font names referenced across all active bx entries
+        const needed = new Set()
+        for (const entry of _bxEntries) {
+          if (!entry) continue
+          if (entry._parsedFonts) entry._parsedFonts.forEach(f => needed.add(f))
+        }
+
+        // Remove fonts no longer needed from _pkgFonts
+        for (const name of [..._pkgFonts.keys()]) {
+          if (!needed.has(name)) _pkgFonts.delete(name)
+        }
+
+        const section = document.getElementById('pkgFontSection')
+        const list    = document.getElementById('fontFileList')
+
+        if (needed.size === 0) {
+          section.style.display = 'none'
+          list.innerHTML = ''
+          return
+        }
+
+        section.style.display = ''
+        list.innerHTML = ''
+
+        for (const name of needed) {
+          if (!_pkgFonts.has(name)) _pkgFonts.set(name, { file: null, existingFile: null })
+          const entry = _pkgFonts.get(name)
+          const filename = name + '.ttf'
+          const hasFile = !!(entry.file || entry.existingFile)
+
+          const row = document.createElement('div')
+          row.className = 'pkg-bx-entry'
+          row.dataset.font = name
+          row.innerHTML = `
+            <div class="pkg-bx-drop${hasFile ? ' has-file' : ''}" id="fontDrop_${esc(name)}">
+              <input type="file" accept=".ttf,.otf,.woff,.woff2" id="fontInput_${esc(name)}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="flex-shrink:0;color:${hasFile ? 'var(--teal)' : 'var(--text3)'}">
+                <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+              </svg>
+              <span class="pkg-bx-drop-label" id="fontLabel_${esc(name)}">${hasFile ? (entry.existingFile || entry.file?.name || filename) : filename}</span>
+            </div>
+            <div style="flex:1;font-family:var(--mono);font-size:0.65rem;color:var(--text3);padding-left:2px">
+              ${esc(name)}
+            </div>
+            <button class="pkg-remove-bx-btn" onclick="_clearFontEntry('${esc(name).replace(/'/g, "\\'")}')" title="Remove font">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>`
+
+          const dropZone = row.querySelector(`#fontDrop_${esc(name)}`)
+          const inputEl  = row.querySelector(`#fontInput_${esc(name)}`)
+
+          inputEl.addEventListener('change', e => {
+            const f = e.target.files[0]
+            if (f) _setFontFile(name, f)
+            e.target.value = ''
+          })
+          dropZone.addEventListener('click', () => inputEl.click())
+          dropZone.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over') })
+          dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over') })
+          dropZone.addEventListener('drop', e => {
+            e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over')
+            const f = e.dataTransfer.files[0]
+            if (f) _setFontFile(name, f)
+          })
+
+          list.appendChild(row)
+        }
+      }
+
+      function _setFontFile(name, file) {
+        _pkgFonts.set(name, { file, existingFile: null })
+        const drop  = document.getElementById(`fontDrop_${esc(name)}`)
+        const label = document.getElementById(`fontLabel_${esc(name)}`)
+        if (drop)  { drop.classList.add('has-file'); drop.querySelector('svg').style.color = 'var(--teal)' }
+        if (label) label.textContent = file.name
+      }
+
+      function _clearFontEntry(name) {
+        _pkgFonts.set(name, { file: null, existingFile: null })
+        const drop  = document.getElementById(`fontDrop_${esc(name)}`)
+        const label = document.getElementById(`fontLabel_${esc(name)}`)
+        if (drop)  { drop.classList.remove('has-file'); drop.querySelector('svg').style.color = 'var(--text3)' }
+        if (label) label.textContent = name + '.ttf'
       }
 
       // ── Title → Folder ID ─────────────────────────────────────────────────
@@ -3706,6 +3861,15 @@
             }
           })
 
+          // Font files: send new ones; existing ones are kept by the server automatically
+          let fontIdx = 0
+          for (const [, entry] of _pkgFonts) {
+            if (entry.file) {
+              fd.append(`font_${fontIdx}`, entry.file, entry.file.name)
+              fontIdx++
+            }
+          }
+
           document.getElementById('createPkgSubmitBtn').disabled = true
           document.getElementById('createPkgProgress').classList.add('active')
           document.getElementById('createPkgProgressText').textContent = 'Saving…'
@@ -3781,6 +3945,14 @@
           const label = document.getElementById(`bxTag_${_bxEntries.indexOf(entry)}`)?.value.trim() || 'Default'
           fd.append(`bxLabel_${bxIdx}`, label)
           bxIdx++
+        }
+
+        let fontIdx = 0
+        for (const [, entry] of _pkgFonts) {
+          if (entry.file) {
+            fd.append(`font_${fontIdx}`, entry.file, entry.file.name)
+            fontIdx++
+          }
         }
 
         // Submit

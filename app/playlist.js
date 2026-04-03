@@ -262,6 +262,7 @@ function setupPlaylistPlayer(playlist, metas) {
         isBx2 && Array.isArray(parsedBx.effects) ? parsedBx.effects : []
       newPath = buildPath(markerData, newTotalFrames)
       newEffects = bxEffects
+      await loadEffectFonts(bxEffects, folder)
       newPeaks = findPeaks(
         Object.entries(markerData)
           .map(([k, v]) => ({
