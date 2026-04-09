@@ -1,5 +1,60 @@
 #!/bin/bash
 
+# Function to check if running in a terminal
+is_terminal() {
+    [ -t 1 ] && return 0 || return 1
+}
+
+# If not running in terminal, re-launch in one
+if ! is_terminal; then
+    OS="$(uname -s)"
+    
+    if [[ "$OS" == "Darwin" ]]; then
+        # macOS: Open in Terminal.app
+        osascript <<EOF
+tell application "Terminal"
+    activate
+    do script "cd '$(pwd)' && '$(realpath "$0")' ; exit"
+end tell
+EOF
+        exit 0
+        
+    elif [[ "$OS" == "Linux" ]]; then
+        # Linux: Try various terminal emulators
+        SCRIPT_PATH="$(realpath "$0")"
+        
+        # Try terminal emulators in order of preference
+        for term in ghostty gnome-terminal xterm konsole terminator alacritty kitty urxvt rxvt st; do
+            if command -v "$term" &>/dev/null; then
+                case "$term" in
+                    gnome-terminal)
+                        gnome-terminal -- bash -c "cd '$(pwd)' && '$SCRIPT_PATH' ; exec bash"
+                        ;;
+                    xterm|konsole|terminator|urxvt|rxvt|st)
+                        $term -e bash -c "cd '$(pwd)' && '$SCRIPT_PATH' ; exec bash"
+                        ;;
+                    alacritty|kitty)
+                        $term -e bash -c "cd '$(pwd)' && '$SCRIPT_PATH' ; exec bash"
+                        ;;
+                esac
+                exit 0
+            fi
+        done
+        
+        # If no terminal found, show error in dialog
+        if command -v zenity &>/dev/null; then
+            zenity --error --text="No terminal emulator found. Please run this script from the terminal manually."
+        elif command -v kdialog &>/dev/null; then
+            kdialog --error "No terminal emulator found. Please run this script from the terminal manually."
+        else
+            echo "No terminal emulator found. Please run this script from the terminal manually."
+            read -p "Press Enter to exit..."
+        fi
+        exit 1
+    fi
+fi
+
+# ===== Original script starts here =====
 echo "===== Starting Server Setup ====="
 
 if ! command -v python3 &>/dev/null; then
@@ -68,3 +123,10 @@ echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 python3 scripts/server.py
+
+# Keep terminal open if script exits unexpectedly
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Script encountered an error."
+    read -p "Press Enter to close this window..."
+fi
