@@ -39,6 +39,17 @@ def bump_version():
 
 
 # ── JSON helpers ───────────────────────────────────────────────────────────────
+def _read_body(rfile, content_length, chunk_size=1 * 1024 * 1024):
+    """Read request body in chunks — avoids macOS EINVAL on large reads."""
+    chunks = []
+    remaining = content_length
+    while remaining > 0:
+        chunk = rfile.read(min(chunk_size, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b''.join(chunks)
 
 def read_json(path: Path):
     with open(path, "r", encoding="utf-8") as f:
@@ -205,7 +216,7 @@ def api_import(handler):
     if content_length == 0:
         return {"error": "Empty request body"}, 400
 
-    zip_bytes = handler.rfile.read(content_length)
+    zip_bytes = _read_body(handler.rfile, content_length)
 
     if not zipfile.is_zipfile(io.BytesIO(zip_bytes)):
         return {"error": "Uploaded file is not a valid zip archive"}, 400
@@ -371,7 +382,7 @@ def api_write_meta(handler, section: str, folder_id: str):
     if content_length == 0:
         return {"error": "Empty request body"}, 400
 
-    raw = handler.rfile.read(content_length)
+    raw = _read_body(handler.rfile, content_length)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -394,7 +405,7 @@ def api_reorder(handler, section: str):
     if content_length == 0:
         return {"error": "Empty request body"}, 400
 
-    raw = handler.rfile.read(content_length)
+    raw = _read_body(handler.rfile, content_length)
     try:
         new_order = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -433,7 +444,7 @@ def parse_multipart_form(handler):
     boundary_bytes = ('--' + boundary).encode('latin-1')
 
     content_length = int(handler.headers.get('Content-Length', 0))
-    body = handler.rfile.read(content_length)
+    body = _read_body(handler.rfile, content_length)
 
     fields = {}
     files = {}
@@ -902,7 +913,7 @@ def api_export_package(handler):
     if content_length == 0:
         return {"error": "Empty request body"}, 400
 
-    raw = handler.rfile.read(content_length)
+    raw = _read_body(handler.rfile, content_length)
     try:
         body = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -992,7 +1003,7 @@ def api_export_token(handler):
     if content_length == 0:
         return {"error": "Empty request body"}, 400
     try:
-        body = json.loads(handler.rfile.read(content_length))
+        body = json.loads(_read_body(handler.rfile, content_length))
     except json.JSONDecodeError as e:
         return {"error": f"Invalid JSON: {e}"}, 400
 
