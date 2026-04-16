@@ -7,6 +7,7 @@ Opens the manager page automatically.
 
 import io
 import json
+import os
 import re
 import shutil
 import sys
@@ -425,15 +426,18 @@ def api_reorder(handler, section: str):
     return {"reordered": section, "count": len(new_order)}, 200
 
 
-# ── Multipart form parser ──────────────────────────────────────────────────────
+# ── Multipart form parser (streaming) ─────────────────────────────────────────
 
 def parse_multipart_form(handler):
     """
-    Parse multipart/form-data from an HTTP request.
-    Returns (fields, files) where:
-      fields = {name: str_value}
-      files  = {name: (original_filename, bytes)}
-    Handles multiple files with the same name by using name_0, name_1 etc.
+    Streaming multipart/form-data parser.
+    File parts are written directly to temp files — never held in RAM.
+    Returns (fields, files, temp_paths) where:
+      fields     = {name: str}
+      files      = {name: (original_filename, tmp_path_str)}
+      temp_paths = [str]  — caller must unlink when done (missing_ok=True is fine)
+    Callers should shutil.move(tmp_path, dest) to place files, then the temp
+    is already gone; the finally cleanup handles any leftovers on error.
     """
     ct = handler.headers.get('Content-Type', '')
     m = re.search(r'boundary=([^\s;]+)', ct)
@@ -442,48 +446,132 @@ def parse_multipart_form(handler):
 
     boundary = m.group(1).strip('"\'')
     boundary_bytes = ('--' + boundary).encode('latin-1')
+    end_of_part = b'\r\n' + boundary_bytes   # delimiter between parts
 
     content_length = int(handler.headers.get('Content-Length', 0))
-    body = _read_body(handler.rfile, content_length)
+    rfile = handler.rfile
 
     fields = {}
     files = {}
+    temp_paths = []
 
-    parts = body.split(boundary_bytes)
-    for part in parts[1:]:
-        if part.lstrip(b'\r\n').startswith(b'--'):
+    CHUNK = 256 * 1024   # 256 KB read chunks — small enough to keep memory low
+    buf = bytearray()
+    total_read = 0
+
+    def refill():
+        nonlocal total_read
+        remaining = content_length - total_read
+        if remaining <= 0:
+            return False
+        data = rfile.read(min(CHUNK, remaining))
+        if not data:
+            return False
+        buf.extend(data)
+        total_read += len(data)
+        return True
+
+    # Bootstrap: read until we can locate (and skip) the opening boundary line
+    while boundary_bytes not in buf:
+        if not refill():
+            raise ValueError("Opening boundary not found in request body")
+    skip_to = bytes(buf).index(boundary_bytes) + len(boundary_bytes)
+    del buf[:skip_to]
+    # Skip the \r\n that follows the opening boundary
+    if bytes(buf)[:2] == b'\r\n':
+        del buf[:2]
+
+    while True:
+        # Ensure we have complete headers in the buffer
+        while b'\r\n\r\n' not in bytes(buf):
+            if not refill():
+                break
+
+        buf_view = bytes(buf)
+
+        # Terminal boundary suffix '--' means we're done
+        if buf_view.startswith(b'--'):
             break
-        if part.startswith(b'\r\n'):
-            part = part[2:]
-        elif part.startswith(b'\n'):
-            part = part[1:]
 
-        if b'\r\n\r\n' in part:
-            header_raw, body_part = part.split(b'\r\n\r\n', 1)
-        elif b'\n\n' in part:
-            header_raw, body_part = part.split(b'\n\n', 1)
-        else:
-            continue
+        hdr_end = buf_view.find(b'\r\n\r\n')
+        if hdr_end == -1:
+            break
 
-        if body_part.endswith(b'\r\n'):
-            body_part = body_part[:-2]
-        elif body_part.endswith(b'\n'):
-            body_part = body_part[:-1]
+        header_str = buf_view[:hdr_end].decode('utf-8', errors='replace')
+        del buf[:hdr_end + 4]
 
-        header_str = header_raw.decode('utf-8', errors='replace')
         name_m = re.search(r'name="([^"]*)"', header_str, re.IGNORECASE)
         fname_m = re.search(r'filename="([^"]*)"', header_str, re.IGNORECASE)
         if not name_m:
             continue
 
-        name = name_m.group(1)
-        if fname_m:
-            filename = fname_m.group(1)
-            files[name] = (filename, body_part)
-        else:
-            fields[name] = body_part.decode('utf-8', errors='replace')
+        part_name = name_m.group(1)
+        is_file = fname_m is not None
+        filename = fname_m.group(1) if fname_m else None
 
-    return fields, files
+        if is_file:
+            # Stream body directly to a temp file — never in RAM
+            suffix = Path(filename).suffix if filename else ''
+            fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+            temp_paths.append(tmp_path)
+            with os.fdopen(fd, 'wb') as tmp_f:
+                while True:
+                    buf_view = bytes(buf)
+                    idx = buf_view.find(end_of_part)
+                    if idx != -1:
+                        tmp_f.write(buf_view[:idx])
+                        del buf[:idx + len(end_of_part)]
+                        break
+                    # Write everything except the last (hold-back) bytes so we
+                    # never split the boundary marker across two iterations.
+                    hold = len(end_of_part)
+                    safe = len(buf) - hold
+                    if safe > 0:
+                        tmp_f.write(bytes(buf[:safe]))
+                        del buf[:safe]
+                    if not refill():
+                        tmp_f.write(bytes(buf))
+                        buf.clear()
+                        break
+            files[part_name] = (filename, tmp_path)
+        else:
+            # Small text field — accumulate in memory (fields are always tiny)
+            field_data = bytearray()
+            while True:
+                buf_view = bytes(buf)
+                idx = buf_view.find(end_of_part)
+                if idx != -1:
+                    field_data.extend(buf_view[:idx])
+                    del buf[:idx + len(end_of_part)]
+                    break
+                hold = len(end_of_part)
+                safe = len(buf) - hold
+                if safe > 0:
+                    field_data.extend(buf[:safe])
+                    del buf[:safe]
+                if not refill():
+                    field_data.extend(buf)
+                    buf.clear()
+                    break
+            fields[part_name] = field_data.decode('utf-8', errors='replace')
+
+        # After the boundary: '--' = final, '\r\n' = more parts follow
+        buf_view = bytes(buf)
+        if buf_view.startswith(b'--'):
+            break
+        if buf_view.startswith(b'\r\n'):
+            del buf[:2]
+
+    return fields, files, temp_paths
+
+
+def _cleanup_temps(temp_paths):
+    """Silently remove any leftover temp files (already-moved files are skipped)."""
+    for p in temp_paths:
+        try:
+            Path(p).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 # ── API: create video package ──────────────────────────────────────────────────
@@ -493,94 +581,94 @@ def api_create_video(handler):
     if 'multipart/form-data' not in ct:
         return {"error": "Expected multipart/form-data"}, 400
 
+    temp_paths = []
     try:
-        fields, files = parse_multipart_form(handler)
+        fields, files, temp_paths = parse_multipart_form(handler)
     except Exception as e:
         return {"error": f"Failed to parse form data: {e}"}, 400
 
-    # ── Validate folder ID ──────────────────────────────────────────────────
-    folder_id = fields.get('folderId', '').strip()
-    if not folder_id:
-        return {"error": "folderId is required"}, 400
-    if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
-        return {"error": "Invalid folder ID"}, 400
-
-    folder_path = VIDEO_BASE / folder_id
-    if folder_path.exists():
-        return {"error": f'Folder "{folder_id}" already exists'}, 409
-
-    # ── Validate video file ─────────────────────────────────────────────────
-    if 'video' not in files:
-        return {"error": "Video file is required"}, 400
-    video_filename, video_bytes = files['video']
-    if not video_filename:
-        return {"error": "Video file has no name"}, 400
-
-    # ── Parse meta ──────────────────────────────────────────────────────────
     try:
-        meta = json.loads(fields.get('meta', '{}'))
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid meta JSON: {e}"}, 400
+        # ── Validate folder ID ──────────────────────────────────────────────────
+        folder_id = fields.get('folderId', '').strip()
+        if not folder_id:
+            return {"error": "folderId is required"}, 400
+        if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+            return {"error": "Invalid folder ID"}, 400
 
-    # ── Build the package ───────────────────────────────────────────────────
-    folder_path.mkdir(parents=True, exist_ok=False)
-    try:
-        # Video
-        with open(folder_path / video_filename, 'wb') as f:
-            f.write(video_bytes)
-        meta['videoFile'] = video_filename
-
-        # Thumbnail (optional)
-        if 'thumbnail' in files:
-            thumb_filename, thumb_bytes = files['thumbnail']
-            if thumb_filename and thumb_bytes:
-                with open(folder_path / thumb_filename, 'wb') as f:
-                    f.write(thumb_bytes)
-                meta['thumbnail'] = thumb_filename
-
-        # BX files — sent as bx_0, bx_1, …
-        bx_files_meta = []
-        idx = 0
-        while f'bx_{idx}' in files:
-            bx_filename, bx_bytes = files[f'bx_{idx}']
-            label = fields.get(f'bxLabel_{idx}', 'Default')
-            if bx_filename and bx_bytes:
-                with open(folder_path / bx_filename, 'wb') as f:
-                    f.write(bx_bytes)
-                bx_files_meta.append({"label": label, "file": bx_filename})
-            idx += 1
-        if bx_files_meta:
-            meta['bxFiles'] = bx_files_meta
-
-        # Font files — sent as font_0, font_1, …
-        fidx = 0
-        while f'font_{fidx}' in files:
-            font_filename, font_bytes = files[f'font_{fidx}']
-            if font_filename and font_bytes:
-                with open(folder_path / font_filename, 'wb') as f:
-                    f.write(font_bytes)
-            fidx += 1
-
-        # Write meta.json
-        write_json(folder_path / 'meta.json', meta)
-
-        # Update manifest (prepend so it shows first)
-        manifest_path = VIDEO_BASE / 'manifest.json'
-        if manifest_path.exists():
-            manifest = read_json(manifest_path)
-        else:
-            VIDEO_BASE.mkdir(parents=True, exist_ok=True)
-            manifest = []
-        manifest.insert(0, folder_id)
-        write_json(manifest_path, manifest)
-
-        bump_version()
-        return {"created": folder_id}, 200
-
-    except Exception as e:
+        folder_path = VIDEO_BASE / folder_id
         if folder_path.exists():
-            shutil.rmtree(folder_path)
-        return {"error": f"Failed to create package: {e}"}, 500
+            return {"error": f'Folder "{folder_id}" already exists'}, 409
+
+        # ── Validate video file ─────────────────────────────────────────────────
+        if 'video' not in files:
+            return {"error": "Video file is required"}, 400
+        video_filename, video_tmp = files['video']
+        if not video_filename:
+            return {"error": "Video file has no name"}, 400
+
+        # ── Parse meta ──────────────────────────────────────────────────────────
+        try:
+            meta = json.loads(fields.get('meta', '{}'))
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid meta JSON: {e}"}, 400
+
+        # ── Build the package ───────────────────────────────────────────────────
+        folder_path.mkdir(parents=True, exist_ok=False)
+        try:
+            # Video — move temp file straight into place (no extra copy)
+            shutil.move(video_tmp, str(folder_path / video_filename))
+            meta['videoFile'] = video_filename
+
+            # Thumbnail (optional)
+            if 'thumbnail' in files:
+                thumb_filename, thumb_tmp = files['thumbnail']
+                if thumb_filename and thumb_tmp:
+                    shutil.move(thumb_tmp, str(folder_path / thumb_filename))
+                    meta['thumbnail'] = thumb_filename
+
+            # BX files — sent as bx_0, bx_1, …
+            bx_files_meta = []
+            idx = 0
+            while f'bx_{idx}' in files:
+                bx_filename, bx_tmp = files[f'bx_{idx}']
+                label = fields.get(f'bxLabel_{idx}', 'Default')
+                if bx_filename and bx_tmp:
+                    shutil.move(bx_tmp, str(folder_path / bx_filename))
+                    bx_files_meta.append({"label": label, "file": bx_filename})
+                idx += 1
+            if bx_files_meta:
+                meta['bxFiles'] = bx_files_meta
+
+            # Font files — sent as font_0, font_1, …
+            fidx = 0
+            while f'font_{fidx}' in files:
+                font_filename, font_tmp = files[f'font_{fidx}']
+                if font_filename and font_tmp:
+                    shutil.move(font_tmp, str(folder_path / font_filename))
+                fidx += 1
+
+            # Write meta.json
+            write_json(folder_path / 'meta.json', meta)
+
+            # Update manifest (prepend so it shows first)
+            manifest_path = VIDEO_BASE / 'manifest.json'
+            if manifest_path.exists():
+                manifest = read_json(manifest_path)
+            else:
+                VIDEO_BASE.mkdir(parents=True, exist_ok=True)
+                manifest = []
+            manifest.insert(0, folder_id)
+            write_json(manifest_path, manifest)
+
+            bump_version()
+            return {"created": folder_id}, 200
+
+        except Exception as e:
+            if folder_path.exists():
+                shutil.rmtree(folder_path)
+            return {"error": f"Failed to create package: {e}"}, 500
+    finally:
+        _cleanup_temps(temp_paths)
 
 
 # ── API: update video package ──────────────────────────────────────────────────
@@ -597,105 +685,101 @@ def api_update_video(handler, folder_id: str):
     if not folder_path.exists():
         return {"error": f'Folder not found: {folder_id}'}, 404
 
+    temp_paths = []
     try:
-        fields, files = parse_multipart_form(handler)
+        fields, files, temp_paths = parse_multipart_form(handler)
     except Exception as e:
         return {"error": f"Failed to parse form data: {e}"}, 400
 
-    # ── Parse meta ──────────────────────────────────────────────────────────
     try:
-        meta = json.loads(fields.get('meta', '{}'))
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid meta JSON: {e}"}, 400
+        # ── Parse meta ──────────────────────────────────────────────────────────
+        try:
+            meta = json.loads(fields.get('meta', '{}'))
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid meta JSON: {e}"}, 400
 
-    # ── Handle folder rename ────────────────────────────────────────────────
-    new_folder_id = fields.get('newFolderId', folder_id).strip()
-    if not new_folder_id:
-        new_folder_id = folder_id
-    if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
-        return {"error": "Invalid new folder ID"}, 400
+        # ── Handle folder rename ────────────────────────────────────────────────
+        new_folder_id = fields.get('newFolderId', folder_id).strip()
+        if not new_folder_id:
+            new_folder_id = folder_id
+        if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
+            return {"error": "Invalid new folder ID"}, 400
 
-    if new_folder_id != folder_id:
-        new_folder_path = VIDEO_BASE / new_folder_id
-        if new_folder_path.exists():
-            return {"error": f'Folder "{new_folder_id}" already exists'}, 409
-        # Rename the folder on disk
-        folder_path.rename(new_folder_path)
-        folder_path = new_folder_path
-        # Update manifest
-        manifest_path = VIDEO_BASE / 'manifest.json'
-        if manifest_path.exists():
-            manifest = read_json(manifest_path)
-            if folder_id in manifest:
-                idx = manifest.index(folder_id)
-                manifest[idx] = new_folder_id
-                write_json(manifest_path, manifest)
+        if new_folder_id != folder_id:
+            new_folder_path = VIDEO_BASE / new_folder_id
+            if new_folder_path.exists():
+                return {"error": f'Folder "{new_folder_id}" already exists'}, 409
+            folder_path.rename(new_folder_path)
+            folder_path = new_folder_path
+            manifest_path = VIDEO_BASE / 'manifest.json'
+            if manifest_path.exists():
+                manifest = read_json(manifest_path)
+                if folder_id in manifest:
+                    idx = manifest.index(folder_id)
+                    manifest[idx] = new_folder_id
+                    write_json(manifest_path, manifest)
 
-    try:
-        # ── Video file (optional replacement) ──────────────────────────────
-        if 'video' in files:
-            video_filename, video_bytes = files['video']
-            if video_filename and video_bytes:
-                # Remove old video file if different name
-                old_video = meta.get('videoFile')
-                if old_video and old_video != video_filename:
-                    old_path = folder_path / old_video
-                    if old_path.exists():
-                        old_path.unlink()
-                with open(folder_path / video_filename, 'wb') as f:
-                    f.write(video_bytes)
-                meta['videoFile'] = video_filename
+        try:
+            # ── Video file (optional replacement) ──────────────────────────────
+            if 'video' in files:
+                video_filename, video_tmp = files['video']
+                if video_filename and video_tmp:
+                    old_video = meta.get('videoFile')
+                    if old_video and old_video != video_filename:
+                        old_path = folder_path / old_video
+                        if old_path.exists():
+                            old_path.unlink()
+                    shutil.move(video_tmp, str(folder_path / video_filename))
+                    meta['videoFile'] = video_filename
 
-        # ── Thumbnail (optional replacement) ───────────────────────────────
-        if 'thumbnail' in files:
-            thumb_filename, thumb_bytes = files['thumbnail']
-            if thumb_filename and thumb_bytes:
-                old_thumb = meta.get('thumbnail')
-                if old_thumb and old_thumb != thumb_filename:
-                    old_path = folder_path / old_thumb
-                    if old_path.exists():
-                        old_path.unlink()
-                with open(folder_path / thumb_filename, 'wb') as f:
-                    f.write(thumb_bytes)
-                meta['thumbnail'] = thumb_filename
+            # ── Thumbnail (optional replacement) ───────────────────────────────
+            if 'thumbnail' in files:
+                thumb_filename, thumb_tmp = files['thumbnail']
+                if thumb_filename and thumb_tmp:
+                    old_thumb = meta.get('thumbnail')
+                    if old_thumb and old_thumb != thumb_filename:
+                        old_path = folder_path / old_thumb
+                        if old_path.exists():
+                            old_path.unlink()
+                    shutil.move(thumb_tmp, str(folder_path / thumb_filename))
+                    meta['thumbnail'] = thumb_filename
 
-        # ── BX files ────────────────────────────────────────────────────────
-        # Each slot is either a new upload (bxFile_N) or a keep-existing ref (bxExistingFile_N)
-        bx_count_str = fields.get('bxCount', '')
-        if bx_count_str.isdigit():
-            bx_count = int(bx_count_str)
-            bx_files_meta = []
-            for i in range(bx_count):
-                label = fields.get(f'bxLabel_{i}', 'Default')
-                if f'bxFile_{i}' in files:
-                    bx_filename, bx_bytes = files[f'bxFile_{i}']
-                    if bx_filename and bx_bytes:
-                        with open(folder_path / bx_filename, 'wb') as f:
-                            f.write(bx_bytes)
-                        bx_files_meta.append({"label": label, "file": bx_filename})
-                elif f'bxExistingFile_{i}' in fields:
-                    existing_name = fields[f'bxExistingFile_{i}']
-                    if existing_name:
-                        bx_files_meta.append({"label": label, "file": existing_name})
-            if bx_files_meta:
-                meta['bxFiles'] = bx_files_meta
+            # ── BX files ────────────────────────────────────────────────────────
+            bx_count_str = fields.get('bxCount', '')
+            if bx_count_str.isdigit():
+                bx_count = int(bx_count_str)
+                bx_files_meta = []
+                for i in range(bx_count):
+                    label = fields.get(f'bxLabel_{i}', 'Default')
+                    if f'bxFile_{i}' in files:
+                        bx_filename, bx_tmp = files[f'bxFile_{i}']
+                        if bx_filename and bx_tmp:
+                            shutil.move(bx_tmp, str(folder_path / bx_filename))
+                            bx_files_meta.append({"label": label, "file": bx_filename})
+                    elif f'bxExistingFile_{i}' in fields:
+                        existing_name = fields[f'bxExistingFile_{i}']
+                        if existing_name:
+                            bx_files_meta.append({"label": label, "file": existing_name})
+                if bx_files_meta:
+                    meta['bxFiles'] = bx_files_meta
 
-        # Font files — new uploads only; existing font files are left in place
-        fidx = 0
-        while f'font_{fidx}' in files:
-            font_filename, font_bytes = files[f'font_{fidx}']
-            if font_filename and font_bytes:
-                with open(folder_path / font_filename, 'wb') as f:
-                    f.write(font_bytes)
-            fidx += 1
+            # Font files — new uploads only; existing font files left in place
+            fidx = 0
+            while f'font_{fidx}' in files:
+                font_filename, font_tmp = files[f'font_{fidx}']
+                if font_filename and font_tmp:
+                    shutil.move(font_tmp, str(folder_path / font_filename))
+                fidx += 1
 
-        # Write meta.json
-        write_json(folder_path / 'meta.json', meta)
-        bump_version()
-        return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
+            # Write meta.json
+            write_json(folder_path / 'meta.json', meta)
+            bump_version()
+            return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
 
-    except Exception as e:
-        return {"error": f"Failed to update package: {e}"}, 500
+        except Exception as e:
+            return {"error": f"Failed to update package: {e}"}, 500
+    finally:
+        _cleanup_temps(temp_paths)
 
 
 # ── Playlist duration tally ────────────────────────────────────────────────────
@@ -788,56 +872,58 @@ def api_create_playlist(handler):
     if 'multipart/form-data' not in ct:
         return {"error": "Expected multipart/form-data"}, 400
 
+    temp_paths = []
     try:
-        fields, files = parse_multipart_form(handler)
+        fields, files, temp_paths = parse_multipart_form(handler)
     except Exception as e:
         return {"error": f"Failed to parse form data: {e}"}, 400
 
-    folder_id = fields.get('folderId', '').strip()
-    if not folder_id:
-        return {"error": "folderId is required"}, 400
-    if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
-        return {"error": "Invalid folder ID"}, 400
-
-    folder_path = PLAYLIST_BASE / folder_id
-    if folder_path.exists():
-        return {"error": f'Folder "{folder_id}" already exists'}, 409
-
     try:
-        meta = json.loads(fields.get('meta', '{}'))
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid meta JSON: {e}"}, 400
+        folder_id = fields.get('folderId', '').strip()
+        if not folder_id:
+            return {"error": "folderId is required"}, 400
+        if '/' in folder_id or '\\' in folder_id or folder_id in ('.', '..'):
+            return {"error": "Invalid folder ID"}, 400
 
-    folder_path.mkdir(parents=True, exist_ok=False)
-    try:
-        if 'thumbnail' in files:
-            thumb_filename, thumb_bytes = files['thumbnail']
-            if thumb_filename and thumb_bytes:
-                with open(folder_path / thumb_filename, 'wb') as f:
-                    f.write(thumb_bytes)
-                meta['thumbnail'] = thumb_filename
-
-        # Tally total runtime from video metas
-        total_dur = _tally_playlist_duration(meta.get('videos', []))
-        meta['totalDurationSecs'] = round(total_dur, 3)
-
-        write_json(folder_path / 'meta.json', meta)
-
-        manifest_path = PLAYLIST_BASE / 'manifest.json'
-        if manifest_path.exists():
-            manifest = read_json(manifest_path)
-        else:
-            PLAYLIST_BASE.mkdir(parents=True, exist_ok=True)
-            manifest = []
-        manifest.insert(0, folder_id)
-        write_json(manifest_path, manifest)
-        bump_version()
-        return {"created": folder_id}, 200
-
-    except Exception as e:
+        folder_path = PLAYLIST_BASE / folder_id
         if folder_path.exists():
-            shutil.rmtree(folder_path)
-        return {"error": f"Failed to create playlist: {e}"}, 500
+            return {"error": f'Folder "{folder_id}" already exists'}, 409
+
+        try:
+            meta = json.loads(fields.get('meta', '{}'))
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid meta JSON: {e}"}, 400
+
+        folder_path.mkdir(parents=True, exist_ok=False)
+        try:
+            if 'thumbnail' in files:
+                thumb_filename, thumb_tmp = files['thumbnail']
+                if thumb_filename and thumb_tmp:
+                    shutil.move(thumb_tmp, str(folder_path / thumb_filename))
+                    meta['thumbnail'] = thumb_filename
+
+            total_dur = _tally_playlist_duration(meta.get('videos', []))
+            meta['totalDurationSecs'] = round(total_dur, 3)
+
+            write_json(folder_path / 'meta.json', meta)
+
+            manifest_path = PLAYLIST_BASE / 'manifest.json'
+            if manifest_path.exists():
+                manifest = read_json(manifest_path)
+            else:
+                PLAYLIST_BASE.mkdir(parents=True, exist_ok=True)
+                manifest = []
+            manifest.insert(0, folder_id)
+            write_json(manifest_path, manifest)
+            bump_version()
+            return {"created": folder_id}, 200
+
+        except Exception as e:
+            if folder_path.exists():
+                shutil.rmtree(folder_path)
+            return {"error": f"Failed to create playlist: {e}"}, 500
+    finally:
+        _cleanup_temps(temp_paths)
 
 
 # ── API: update playlist ───────────────────────────────────────────────────────
@@ -854,56 +940,58 @@ def api_update_playlist(handler, folder_id: str):
     if not folder_path.exists():
         return {"error": f'Folder not found: {folder_id}'}, 404
 
+    temp_paths = []
     try:
-        fields, files = parse_multipart_form(handler)
+        fields, files, temp_paths = parse_multipart_form(handler)
     except Exception as e:
         return {"error": f"Failed to parse form data: {e}"}, 400
 
     try:
-        meta = json.loads(fields.get('meta', '{}'))
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid meta JSON: {e}"}, 400
+        try:
+            meta = json.loads(fields.get('meta', '{}'))
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid meta JSON: {e}"}, 400
 
-    new_folder_id = fields.get('newFolderId', folder_id).strip() or folder_id
-    if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
-        return {"error": "Invalid new folder ID"}, 400
+        new_folder_id = fields.get('newFolderId', folder_id).strip() or folder_id
+        if '/' in new_folder_id or '\\' in new_folder_id or new_folder_id in ('.', '..'):
+            return {"error": "Invalid new folder ID"}, 400
 
-    if new_folder_id != folder_id:
-        new_folder_path = PLAYLIST_BASE / new_folder_id
-        if new_folder_path.exists():
-            return {"error": f'Folder "{new_folder_id}" already exists'}, 409
-        folder_path.rename(new_folder_path)
-        folder_path = new_folder_path
-        manifest_path = PLAYLIST_BASE / 'manifest.json'
-        if manifest_path.exists():
-            manifest = read_json(manifest_path)
-            if folder_id in manifest:
-                manifest[manifest.index(folder_id)] = new_folder_id
-                write_json(manifest_path, manifest)
+        if new_folder_id != folder_id:
+            new_folder_path = PLAYLIST_BASE / new_folder_id
+            if new_folder_path.exists():
+                return {"error": f'Folder "{new_folder_id}" already exists'}, 409
+            folder_path.rename(new_folder_path)
+            folder_path = new_folder_path
+            manifest_path = PLAYLIST_BASE / 'manifest.json'
+            if manifest_path.exists():
+                manifest = read_json(manifest_path)
+                if folder_id in manifest:
+                    manifest[manifest.index(folder_id)] = new_folder_id
+                    write_json(manifest_path, manifest)
 
-    try:
-        if 'thumbnail' in files:
-            thumb_filename, thumb_bytes = files['thumbnail']
-            if thumb_filename and thumb_bytes:
-                old_thumb = meta.get('thumbnail')
-                if old_thumb and old_thumb != thumb_filename:
-                    old_path = folder_path / old_thumb
-                    if old_path.exists():
-                        old_path.unlink()
-                with open(folder_path / thumb_filename, 'wb') as f:
-                    f.write(thumb_bytes)
-                meta['thumbnail'] = thumb_filename
+        try:
+            if 'thumbnail' in files:
+                thumb_filename, thumb_tmp = files['thumbnail']
+                if thumb_filename and thumb_tmp:
+                    old_thumb = meta.get('thumbnail')
+                    if old_thumb and old_thumb != thumb_filename:
+                        old_path = folder_path / old_thumb
+                        if old_path.exists():
+                            old_path.unlink()
+                    shutil.move(thumb_tmp, str(folder_path / thumb_filename))
+                    meta['thumbnail'] = thumb_filename
 
-        # Tally total runtime from video metas
-        total_dur = _tally_playlist_duration(meta.get('videos', []))
-        meta['totalDurationSecs'] = round(total_dur, 3)
+            total_dur = _tally_playlist_duration(meta.get('videos', []))
+            meta['totalDurationSecs'] = round(total_dur, 3)
 
-        write_json(folder_path / 'meta.json', meta)
-        bump_version()
-        return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
+            write_json(folder_path / 'meta.json', meta)
+            bump_version()
+            return {"updated": new_folder_id, "renamed": new_folder_id != folder_id}, 200
 
-    except Exception as e:
-        return {"error": f"Failed to update playlist: {e}"}, 500
+        except Exception as e:
+            return {"error": f"Failed to update playlist: {e}"}, 500
+    finally:
+        _cleanup_temps(temp_paths)
 
 
 # ── API: export package (zip) ──────────────────────────────────────────────────
